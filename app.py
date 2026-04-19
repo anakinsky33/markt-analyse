@@ -368,51 +368,142 @@ def ai_gemini(name, typ, data, fund, prog, key):
     except Exception as e:
         return f"⚠️ Gemini-Fehler: {e}"
 
-# ── Anzeige-Funktionen ─────────────────────────────────────────────────────────
-def show_prognose(prog, einheit):
-    farbe = "green" if prog["main_bull"] else "red"
-    richtung = "📈 BULLISCH" if prog["main_bull"] else "📉 BÄRISCH"
-    p = prog["current"]
-    st.subheader(f"🕐 48h-Prognose — :{farbe}[{richtung}]")
-    c1,c2,c3 = st.columns(3)
-    with c1:
-        st.metric(f"Hauptszenario ({prog['bull_pct']}%)",
-                  f"{prog['target_main']:,.4f} {einheit}",
-                  f"{(prog['target_main']-p)/p*100:+.2f}%")
-    with c2:
-        st.metric(f"Alternativszenario ({prog['bear_pct']}%)",
-                  f"{prog['target_alt']:,.4f} {einheit}",
-                  f"{(prog['target_alt']-p)/p*100:+.2f}%")
-    with c3:
-        st.metric("Invalidierungslevel", f"{prog['inval']:,.4f} {einheit}")
-    st.info(f"**Handlungsempfehlung:** {prog['empfehlung']}")
-    with st.expander("📊 Signal-Details"):
-        c1,c2 = st.columns(2)
-        with c1:
-            st.markdown("**🟢 Bullische Signale**")
-            for s in prog["signals_bull"]: st.markdown(f"- {s}")
-        with c2:
-            st.markdown("**🔴 Bärische Signale**")
-            for s in prog["signals_bear"]: st.markdown(f"- {s}")
+# ── Darstellung (Email-Stil) ───────────────────────────────────────────────────
+ASSET_FARBEN = {"aktie": "#1a73e8", "krypto": "#f7931a", "metall": "#FFD700"}
 
-def fmt_fund_df(fund):
-    def fp(v): return f"{v:.2f}" if v is not None else "—"
-    def pct(v): return f"{v*100:.1f} %" if v is not None else "—"
-    def mc(v): return (f"${v/1e12:.2f} T" if v>=1e12 else f"${v/1e9:.2f} B") if v else "—"
-    return pd.DataFrame([
-        ("Marktkapitalisierung", mc(fund.get("marketCap"))),
-        ("KGV Trailing",         fp(fund.get("trailingPE"))),
-        ("KGV Forward",          fp(fund.get("forwardPE"))),
-        ("Kurs / Buchwert",      fp(fund.get("priceToBook"))),
-        ("EPS (Trailing)",       fp(fund.get("trailingEps"))),
-        ("Dividendenrendite",    pct(fund.get("dividendYield"))),
-        ("Umsatzwachstum",       pct(fund.get("revenueGrowth"))),
-        ("Gewinnwachstum",       pct(fund.get("earningsGrowth"))),
-        ("Gewinnmarge",          pct(fund.get("profitMargins"))),
-        ("Eigenkapitalrendite",  pct(fund.get("returnOnEquity"))),
-        ("Verschuldungsgrad",    fp(fund.get("debtToEquity"))),
-        ("52W-Hoch / Tief",      f"{fp(fund.get('week52High'))} / {fp(fund.get('week52Low'))}"),
-    ], columns=["Kennzahl","Wert"])
+def render_card(name, typ, einheit, last, prog, fund, analyse_text):
+    import html as hl
+    farbe = ASSET_FARBEN.get(typ, "#888")
+
+    def px(v):  return f"{v:,.4f}" if v else "—"
+    def rc(v):
+        if not v: return "#888"
+        return "#e74c3c" if v > 70 else ("#27ae60" if v < 30 else "#f39c12")
+    def tc(v):  return "#27ae60" if (v or 0) > 0 else "#e74c3c"
+    def gc(ok): return "#27ae60" if ok else "#e74c3c"
+
+    ema50_ok  = (last["price"] or 0) > (last["ema50"]  or 0)
+    ema200_ok = (last["price"] or 0) > (last["ema200"] or 0)
+    rsi_v     = last["rsi"] or 0
+    rsi_status = "Überkauft" if rsi_v > 70 else ("Überverkauft" if rsi_v < 30 else "Neutral")
+
+    def row(bg, label, value, vc, status, sc):
+        return (f'<tr style="border-bottom:1px solid #eee;background:{bg}">'
+                f'<td style="padding:10px 15px;color:#555;font-size:13px">{label}</td>'
+                f'<td style="padding:10px 15px;font-weight:bold;color:{vc}">{value}</td>'
+                f'<td style="padding:10px 15px;font-size:12px;font-weight:bold;color:{sc}">{status}</td></tr>')
+
+    # Prognose-Zeilen
+    p = prog["current"]
+    pct_main = (prog["target_main"] - p) / p * 100
+    pct_alt  = (prog["target_alt"]  - p) / p * 100
+    trend_col = "#27ae60" if prog["main_bull"] else "#e74c3c"
+    trend_txt = "📈 BULLISCH" if prog["main_bull"] else "📉 BÄRISCH"
+
+    # Fundamentaldaten-Block
+    fund_html = ""
+    if typ == "aktie" and fund:
+        def fp(v): return f"{v:.2f}" if v is not None else "—"
+        def pct(v): return f"{v*100:.1f} %" if v is not None else "—"
+        def mc(v): return (f"${v/1e12:.2f} T" if v >= 1e12 else f"${v/1e9:.2f} B") if v else "—"
+        fund_html = f"""
+  <div style="background:white;border-radius:8px;margin-bottom:16px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06)">
+    <div style="background:#2c3e50;color:white;padding:9px 15px;font-size:11px;font-weight:bold;letter-spacing:1px">FUNDAMENTALDATEN</div>
+    <table style="width:100%;border-collapse:collapse">
+      {row("white",   "Marktkapitalisierung", mc(fund.get("marketCap")),     "#333","","") }
+      {row("#fafafa", "KGV (Trailing)",        fp(fund.get("trailingPE")),    "#333","","") }
+      {row("white",   "KGV (Forward)",         fp(fund.get("forwardPE")),     "#333","","") }
+      {row("#fafafa", "EPS",                   fp(fund.get("trailingEps")),   "#333","","") }
+      {row("white",   "Dividendenrendite",     pct(fund.get("dividendYield")),"#333","","") }
+      {row("#fafafa", "Gewinnmarge",           pct(fund.get("profitMargins")),"#333","","") }
+      {row("white",   "ROE",                   pct(fund.get("returnOnEquity")),"#333","","") }
+      {row("#fafafa", "52W-Hoch / Tief",       fp(fund.get("week52High")) + " / " + fp(fund.get("week52Low")), "#333","","") }
+    </table>
+  </div>"""
+
+    # Analyse-Text formatieren
+    analyse_html = ""
+    if analyse_text:
+        for line in analyse_text.split("\n"):
+            if line.startswith("## "):
+                sec = line[3:]
+                is_p = "7." in sec or "Prognose" in sec or "48h" in sec
+                bc = "#e74c3c" if is_p else farbe
+                tc2 = "#c0392b" if is_p else "#2c3e50"
+                analyse_html += (f'<h3 style="color:{tc2};border-bottom:3px solid {bc};'
+                                 f'padding:8px 0 5px 0;margin-top:24px;font-size:15px">{hl.escape(sec)}</h3>')
+            elif any(line.startswith(f"- {k}") for k in ["HAUPTSZENARIO", "ALTERNATIVSZENARIO"]):
+                analyse_html += f'<p style="margin:7px 0;line-height:1.8;font-weight:bold;color:#e74c3c">{hl.escape(line)}</p>'
+            elif any(line.startswith(f"- {k}") for k in ["ENTSCHEIDENDE", "INVALIDIERUNG", "HANDLUNG"]):
+                analyse_html += f'<p style="margin:7px 0;line-height:1.8;font-weight:bold;color:#f39c12">{hl.escape(line)}</p>'
+            elif line.startswith("**") and line.endswith("**"):
+                analyse_html += f'<p style="margin:4px 0;line-height:1.7"><strong>{hl.escape(line.strip("*"))}</strong></p>'
+            elif line.strip():
+                analyse_html += f'<p style="margin:4px 0;line-height:1.7">{hl.escape(line)}</p>'
+
+    kat_label = {"aktie": "AKTIEN ANALYSE", "krypto": "KRYPTO ANALYSE", "metall": "EDELMETALL ANALYSE"}.get(typ, "ANALYSE")
+
+    html = f"""
+<div style="font-family:Arial,sans-serif;background:#f0f2f6;padding:16px;border-radius:10px;margin-bottom:8px">
+
+  <!-- Header -->
+  <div style="background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;padding:18px 20px;border-radius:8px;margin-bottom:14px;border-left:5px solid {farbe}">
+    <div style="font-size:10px;letter-spacing:2px;opacity:0.55;text-transform:uppercase">{kat_label} · DAILY · {last['date']}</div>
+    <div style="font-size:22px;font-weight:bold;margin-top:4px;color:{farbe}">{hl.escape(name)}</div>
+    <div style="font-size:12px;opacity:0.65;margin-top:3px">Elliott Wave · RSI · MACD · EMA 50/200 · 48h-Prognose</div>
+  </div>
+
+  <!-- Prognose-Banner -->
+  <div style="background:{trend_col};color:white;padding:12px 16px;border-radius:8px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
+    <span style="font-size:16px;font-weight:bold">{trend_txt} &nbsp; {prog['bull_pct']}% Bull / {prog['bear_pct']}% Bear</span>
+    <span style="font-size:13px;opacity:0.9">{prog['empfehlung']}</span>
+  </div>
+
+  <!-- Kursziele -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+    <div style="background:white;border-radius:8px;padding:12px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,0.08)">
+      <div style="font-size:10px;color:#888;margin-bottom:4px">HAUPTSZENARIO ({prog['bull_pct']}%)</div>
+      <div style="font-size:16px;font-weight:bold;color:{trend_col}">{prog['target_main']:,.4f}</div>
+      <div style="font-size:12px;color:{trend_col}">{pct_main:+.2f}%</div>
+    </div>
+    <div style="background:white;border-radius:8px;padding:12px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,0.08)">
+      <div style="font-size:10px;color:#888;margin-bottom:4px">ALTERNATIVSZENARIO ({prog['bear_pct']}%)</div>
+      <div style="font-size:16px;font-weight:bold;color:#555">{prog['target_alt']:,.4f}</div>
+      <div style="font-size:12px;color:#777">{pct_alt:+.2f}%</div>
+    </div>
+    <div style="background:white;border-radius:8px;padding:12px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,0.08)">
+      <div style="font-size:10px;color:#888;margin-bottom:4px">INVALIDIERUNG</div>
+      <div style="font-size:16px;font-weight:bold;color:#e74c3c">{prog['inval']:,.4f}</div>
+      <div style="font-size:12px;color:#aaa">{einheit}</div>
+    </div>
+  </div>
+
+  <!-- Indikatoren -->
+  <div style="background:white;border-radius:8px;margin-bottom:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06)">
+    <div style="background:#2c3e50;color:white;padding:9px 15px;font-size:11px;font-weight:bold;letter-spacing:1px">TECHNISCHE INDIKATOREN</div>
+    <table style="width:100%;border-collapse:collapse">
+      {row("white",   "Kurs", f'<span style="font-size:17px">{px(last["price"])} {einheit}</span>', farbe, "", "")}
+      {row("#fafafa", "EMA 50",     px(last["ema50"]),  "#2980b9", "Preis ÜBER EMA50"   if ema50_ok  else "Preis UNTER EMA50",   gc(ema50_ok))}
+      {row("white",   "EMA 200",    px(last["ema200"]), "#c0392b", "Preis ÜBER EMA200"  if ema200_ok else "Preis UNTER EMA200",  gc(ema200_ok))}
+      {row("#fafafa", "RSI (14)",   str(rsi_v),         rc(rsi_v), rsi_status, rc(rsi_v))}
+      {row("white",   "MACD",       str(last["macd"]),  tc(last["macd"]), "Bullish" if (last["macd"] or 0)>0 else "Bearish", tc(last["macd"]))}
+      {row("#fafafa", "Histogramm", str(last["hist"]),  tc(last["hist"]), "Momentum steigt" if (last["hist"] or 0)>0 else "Momentum fällt", tc(last["hist"]))}
+    </table>
+  </div>
+
+  {fund_html}
+
+  <!-- KI-Analyse -->
+  {"" if not analyse_text else f'''
+  <div style="background:white;border-radius:8px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,0.06)">
+    <div style="font-size:10px;color:#888;letter-spacing:1px;margin-bottom:12px">KI-ANALYSE</div>
+    ''' + analyse_html + '''
+  </div>'''}
+
+  <div style="text-align:center;margin-top:12px;font-size:11px;color:#aaa">Keine Anlageberatung · Daten: Yahoo Finance / Kraken</div>
+</div>"""
+
+    return html
 
 # ── Hauptschleife ──────────────────────────────────────────────────────────────
 if st.button("🚀 Analyse starten", type="primary", width="stretch"):
@@ -441,113 +532,38 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
         except Exception as e:
             st.error(f"Kursdaten-Fehler: {e}"); continue
 
-        # 1. Prognose (oben)
+        # 1. Prognose berechnen
         prog = generate_prognose(data)
-        show_prognose(prog, einheit)
-        st.markdown("---")
 
-        # 2. Indikatoren + Fundamentaldaten
-        bar.progress(fortschritt + 0.5/n, text=f"{name}: Indikatoren...")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Aktueller Kurs", f"{last['price']:,.4f} {einheit}")
-            ema50_ok  = last["price"] > (last["ema50"]  or 0)
-            ema200_ok = last["price"] > (last["ema200"] or 0)
-            rsi_val   = last["rsi"] or 0
-            st.dataframe(pd.DataFrame([
-                ["EMA 50",     f"{last['ema50']:,.4f}" if last['ema50'] else "—",
-                 "🟢 darüber" if ema50_ok  else "🔴 darunter"],
-                ["EMA 200",    f"{last['ema200']:,.4f}" if last['ema200'] else "—",
-                 "🟢 darüber" if ema200_ok else "🔴 darunter"],
-                ["RSI (14)",   str(rsi_val),
-                 "🔴 Überkauft" if rsi_val>70 else ("🟢 Überverkauft" if rsi_val<30 else "🟡 Neutral")],
-                ["MACD",       str(last["macd"]),
-                 "🟢 Bullish" if (last["macd"] or 0)>0 else "🔴 Bearish"],
-                ["Histogramm", str(last["hist"]),
-                 "🟢 steigt"  if (last["hist"] or 0)>0 else "🔴 fällt"],
-            ], columns=["Indikator","Wert","Status"]), hide_index=True, width="stretch")
-
-        # Fundamentaldaten (nur Aktien)
+        # 2. Fundamentaldaten (nur Aktien)
         fund = {}
-        with col2:
-            if typ == "aktie" and finnhub_key:
-                bar.progress(fortschritt + 0.6/n, text=f"{name}: Fundamentaldaten...")
-                fund_raw = fetch_fundamentals(asset["symbol"], finnhub_key)
-                err = fund_raw.pop("_error", None) if fund_raw else None
-                # Firmenname übernehmen falls vorhanden
-                company_name = fund_raw.pop("_name", None) if fund_raw else None
-                if company_name:
-                    name = f"{company_name} ({asset['symbol']})"
-                    st.subheader(name)  # Überschrift aktualisieren
-                fund = fund_raw if (fund_raw and any(v is not None for v in fund_raw.values())) else {}
-                if fund:
-                    st.markdown("**Fundamentaldaten**")
-                    st.dataframe(fmt_fund_df(fund), hide_index=True, width="stretch")
-                elif err:
-                    st.warning(f"Finnhub: {err}")
-                else:
-                    st.info("Keine Fundamentaldaten verfügbar")
-            elif typ == "krypto":
-                st.info("ℹ️ Fundamentaldaten nicht anwendbar für Krypto")
-            elif typ == "metall":
-                st.info("ℹ️ Fundamentaldaten nicht anwendbar für Edelmetalle")
+        if typ == "aktie" and finnhub_key:
+            bar.progress(fortschritt + 0.5/n, text=f"{name}: Fundamentaldaten...")
+            fund_raw = fetch_fundamentals(asset["symbol"], finnhub_key)
+            err = fund_raw.pop("_error", None) if fund_raw else None
+            company_name = fund_raw.pop("_name", None) if fund_raw else None
+            if company_name:
+                name = f"{company_name} ({asset['symbol']})"
+                st.subheader(name)
+            fund = fund_raw if (fund_raw and any(v is not None for v in fund_raw.values())) else {}
+            if err and not fund:
+                st.warning(f"Finnhub: {err}")
 
         # 3. KI-Analyse
         analyse_text = ""
-        ki_label = ""
         if "Claude" in ai_modus and ai_key:
             bar.progress(fortschritt + 0.75/n, text=f"{name}: Claude analysiert...")
             analyse_text = ai_claude(name, typ, data, fund, prog, ai_key)
-            ki_label = "🔵 KI-Analyse (Claude)"
         elif "Gemini" in ai_modus and ai_key:
             bar.progress(fortschritt + 0.75/n, text=f"{name}: Gemini analysiert...")
             analyse_text = ai_gemini(name, typ, data, fund, prog, ai_key)
-            ki_label = "🟢 KI-Analyse (Gemini)"
 
-        if analyse_text:
-            st.markdown(f"### {ki_label}")
-            # Abschnitte farbig formatieren
-            farbe_map = {
-                "1.": "#1a73e8", "2.": "#1a73e8", "3.": "#1a73e8", "4.": "#1a73e8",
-                "5.": "#1a73e8", "6.": "#555",    "7.": "#c0392b",
-            }
-            abschnitte = analyse_text.split("\n## ")
-            for i, block in enumerate(abschnitte):
-                if i == 0 and not block.startswith("#"):
-                    if block.strip():
-                        st.markdown(block)
-                    continue
-                lines = block.strip().split("\n", 1)
-                titel = lines[0].lstrip("# ").strip()
-                inhalt = lines[1].strip() if len(lines) > 1 else ""
-                nr = titel.split(".")[0].strip() + "." if "." in titel else ""
-                farbe = farbe_map.get(nr, "#555")
-                is_prognose = "7." in nr or "Prognose" in titel
-                bg = "#fff8f8" if is_prognose else "#f8f9fa"
-                border = "#c0392b" if is_prognose else farbe
-                titel_fmt  = "## " + titel
-                inhalt_html = inhalt.replace("\n", "<br>")
-                st.markdown(
-                    f'<div style="background:{bg};border-left:4px solid {border};'
-                    f'padding:12px 16px;margin:8px 0;border-radius:4px">'
-                    f'<strong style="color:{border}">{titel_fmt}</strong><br><br>'
-                    f'{inhalt_html}</div>',
-                    unsafe_allow_html=True,
-                )
+        # 4. Karte rendern
+        card_html = render_card(name, typ, einheit, last, prog, fund, analyse_text)
+        st.markdown(card_html, unsafe_allow_html=True)
 
         # HTML für E-Mail sammeln
-        farbe_hex = {"aktie":"#1a73e8","krypto":"#f7931a","metall":"#FFD700"}.get(typ,"#888")
-        mail_html += f"""
-<div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto 30px auto;background:#f8f9fa;padding:20px;border-radius:8px;border-left:5px solid {farbe_hex}">
-  <h2 style="margin:0 0 8px 0;color:{farbe_hex}">{name}</h2>
-  <p style="margin:4px 0">Kurs: <strong>{last['price']:,.4f} {einheit}</strong> &nbsp;|&nbsp;
-     RSI: {rsi_val} &nbsp;|&nbsp; {'📈 BULLISCH' if prog['main_bull'] else '📉 BÄRISCH'} ({prog['bull_pct']}%)</p>
-  <p style="margin:4px 0">Hauptszenario: <strong>{prog['target_main']:,.4f}</strong>
-     ({(prog['target_main']-prog['current'])/prog['current']*100:+.2f}%)</p>
-  <p style="margin:4px 0">Empfehlung: <strong>{prog['empfehlung']}</strong></p>
-  {"<hr/><pre style='font-size:12px;white-space:pre-wrap'>" + analyse_text + "</pre>" if analyse_text else ""}
-</div>
-<hr style="border:none;border-top:2px solid #ddd;margin:10px 0 20px 0">"""
+        mail_html += card_html
 
         bar.progress((idx+1)/n, text=f"{name} ✓")
         if idx < n-1:

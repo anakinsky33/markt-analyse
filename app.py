@@ -247,67 +247,103 @@ def generate_prognose(data):
     }
 
 # ── KI-Analyse ─────────────────────────────────────────────────────────────────
-def _build_prompt(name, typ, last, fund, prog):
+def _build_prompt(name, typ, data, fund, prog):
+    last = data[-1]
     def fp(v): return f"{v:.4f}" if v else "—"
+    def px(v): return f"{v:,.4f}" if v else "—"
     def pct(v): return f"{v*100:.1f}%" if v else "—"
     f = fund or {}
+
+    # Letzte 30 Tage als Kontext
+    history = "\n".join(
+        f"  {d['date']}: {px(d['price'])} | RSI:{d['rsi']} | MACD:{d['macd']} | Hist:{d['hist']}"
+        for d in data[-30:]
+    )
+
     fund_block = ""
     if typ == "aktie" and f:
         fund_block = f"""
 FUNDAMENTALDATEN:
 - Marktkapitalisierung: {f.get('marketCap') and f'${f["marketCap"]/1e9:.1f}B' or '—'}
-- KGV (TTM): {fp(f.get('trailingPE'))} | EPS: {fp(f.get('trailingEps'))}
+- KGV (TTM): {fp(f.get('trailingPE'))} | KGV Forward: {fp(f.get('forwardPE'))} | EPS: {fp(f.get('trailingEps'))}
+- Kurs/Buchwert: {fp(f.get('priceToBook'))} | Verschuldungsgrad: {fp(f.get('debtToEquity'))}
 - Gewinnmarge: {pct(f.get('profitMargins'))} | ROE: {pct(f.get('returnOnEquity'))}
+- Umsatzwachstum: {pct(f.get('revenueGrowth'))} | Gewinnwachstum: {pct(f.get('earningsGrowth'))}
 - Dividendenrendite: {pct(f.get('dividendYield'))}
 - 52W-Hoch: {fp(f.get('week52High'))} | 52W-Tief: {fp(f.get('week52Low'))}"""
 
-    asset_kontext = {
-        "aktie":  "Aktienmarkt mit Fokus auf Unternehmensperformance und Marktumfeld",
-        "krypto": "Kryptomarkt mit Fokus auf On-Chain-Dynamik, Marktsentiment und Makrofaktoren",
-        "metall": "Edelmetallmarkt mit Fokus auf Inflationsschutz, USD-Stärke und geopolitische Risiken",
-    }.get(typ, "Finanzmarkt")
+    system_map = {
+        "aktie":  f"Du bist ein erfahrener Aktienanalyst mit Expertise in Elliott-Wellen, RSI, MACD und EMAs. Analysiere {name} präzise und meinungsstark auf Deutsch. Nenne immer konkrete Kurslevels.",
+        "krypto": f"Du bist ein erfahrener Kryptoanalyst mit Expertise in Elliott-Wellen, RSI, MACD und EMAs. Analysiere {name}/USD präzise und meinungsstark auf Deutsch. Nenne immer konkrete Kurslevels in USD.",
+        "metall": f"Du bist ein erfahrener Edelmetall-Analyst mit Expertise in Elliott-Wellen, RSI, MACD und EMAs. Analysiere {name} präzise und meinungsstark auf Deutsch. Nenne immer konkrete Preislevels in USD pro Unze.",
+    }
+    system = system_map.get(typ, f"Du bist ein erfahrener Finanzanalyst. Analysiere {name} auf Deutsch.")
+    trend = "BULLISCH" if prog["main_bull"] else "BÄRISCH"
+    sektion5 = (
+        "## 5. Fundamentale Bewertung\nBewerte KGV, Wachstum, Margen und Verschuldung im Branchenvergleich."
+        if typ == "aktie" else
+        "## 5. Marktsentiment & Makrofaktoren\nWas treibt den Markt aktuell? Welche externen Faktoren sind relevant?"
+    )
 
-    return f"""Du bist ein erfahrener Analyst für {asset_kontext}. Analysiere {name} präzise auf Deutsch.
+    return f"""{system}
 
-TECHNISCHE DATEN (aktuell):
-- Kurs: {last['price']:.4f} | EMA50: {fp(last['ema50'])} | EMA200: {fp(last['ema200'])}
-- RSI(14): {fp(last['rsi'])} | MACD: {fp(last['macd'])} | Signal: {fp(last['signal'])} | Hist: {fp(last['hist'])}
-- Trend: {'BULLISCH' if prog['main_bull'] else 'BÄRISCH'} ({prog['bull_pct']}% Bull / {prog['bear_pct']}% Bear)
-- Bullische Signale: {', '.join(prog['signals_bull']) or '—'}
-- Bärische Signale:  {', '.join(prog['signals_bear']) or '—'}
+AKTUELL ({last['date']}):
+- Kurs:    {px(last['price'])}
+- EMA 50:  {px(last['ema50'])}
+- EMA 200: {px(last['ema200'])}
+- RSI(14): {fp(last['rsi'])}
+- MACD:    {fp(last['macd'])} | Signal: {fp(last['signal'])} | Histogramm: {fp(last['hist'])}
+- Regelbasierter Trend: {trend} ({prog['bull_pct']}% Bull / {prog['bear_pct']}% Bear)
 {fund_block}
 
-Schreibe eine strukturierte Analyse:
-## 1. Marktlage & Trendstruktur
-## 2. Elliott-Wellen-Einschätzung
-## 3. Technische Indikatoren (EMA, RSI, MACD)
-{"## 4. Fundamentale Bewertung" if typ == "aktie" else "## 4. Marktsentiment & Besonderheiten"}
-## 5. 48h-Prognose & Handlungsempfehlung
-- HAUPTSZENARIO (XX%): Kursziel mit % Veränderung
-- ALTERNATIVSZENARIO (XX%): Gegenszenario
-- INVALIDIERUNGSLEVEL: ab welchem Kurs ungültig
+LETZTE 30 TAGE:
+{history}
 
-Antworte professionell, konkret, auf Deutsch."""
+Erstelle eine vollständige technische Analyse:
 
-def ai_claude(name, typ, last, fund, prog, key):
+## 1. Elliott-Wellen-Analyse
+Aktive Welle? Impuls oder Korrektur? Position im Zyklus?
+
+## 2. EMA-Trendstruktur
+Preis vs. EMA50 vs. EMA200. Golden Cross / Death Cross? Trendstärke?
+
+## 3. RSI-Analyse
+Momentum, überkauft/überverkauft, Divergenzen?
+
+## 4. MACD-Analyse
+Crossover, Histogramm-Richtung, Momentum-Veränderung?
+
+{sektion5}
+
+## 6. Gesamtbild & Schlüsselniveaus
+Übergeordneter Bias + konkrete Support- und Resistance-Zonen.
+
+## 7. 2-Tages-Prognose (48h)
+- HAUPTSZENARIO (XX% Wahrscheinlichkeit): Konkreter Kursverlauf mit Zielkurs und % Veränderung.
+- ALTERNATIVSZENARIO (XX% Wahrscheinlichkeit): Gegenszenario mit Kursziel.
+- ENTSCHEIDENDE MARKEN: Welche Levels bestimmen das Szenario?
+- INVALIDIERUNGSLEVEL: Ab welchem Kurs wird das Hauptszenario ungültig?
+- HANDLUNGSEMPFEHLUNG: Klar und direkt."""
+
+def ai_claude(name, typ, data, fund, prog, key):
     try:
         import anthropic
         client = anthropic.Anthropic(api_key=key)
         msg = client.messages.create(
             model="claude-haiku-4-5",
-            max_tokens=1000,
-            messages=[{"role":"user","content":_build_prompt(name,typ,last,fund,prog)}],
+            max_tokens=2500,
+            messages=[{"role":"user","content":_build_prompt(name,typ,data,fund,prog)}],
         )
         return msg.content[0].text
     except Exception as e:
         return f"⚠️ Claude-Fehler: {e}"
 
-def ai_gemini(name, typ, last, fund, prog, key):
+def ai_gemini(name, typ, data, fund, prog, key):
     try:
-        body = json.dumps({"contents":[{"parts":[{"text":_build_prompt(name,typ,last,fund,prog)}]}]}).encode()
+        body = json.dumps({"contents":[{"parts":[{"text":_build_prompt(name,typ,data,fund,prog)}]}]}).encode()
         url  = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={key}"
         req  = urllib.request.Request(url, data=body, headers={"Content-Type":"application/json"})
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with urllib.request.urlopen(req, timeout=45) as r:
             resp = json.loads(r.read())
         return resp["candidates"][0]["content"]["parts"][0]["text"]
     except Exception as e:
@@ -441,12 +477,12 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
         analyse_text = ""
         if "Claude" in ai_modus and ai_key:
             bar.progress(fortschritt + 0.75/n, text=f"{name}: Claude analysiert...")
-            analyse_text = ai_claude(name, typ, last, fund, prog, ai_key)
+            analyse_text = ai_claude(name, typ, data, fund, prog, ai_key)
             st.markdown("### 🔵 KI-Analyse (Claude)")
             st.markdown(analyse_text)
         elif "Gemini" in ai_modus and ai_key:
             bar.progress(fortschritt + 0.75/n, text=f"{name}: Gemini analysiert...")
-            analyse_text = ai_gemini(name, typ, last, fund, prog, ai_key)
+            analyse_text = ai_gemini(name, typ, data, fund, prog, ai_key)
             st.markdown("### 🟢 KI-Analyse (Gemini)")
             st.markdown(analyse_text)
 

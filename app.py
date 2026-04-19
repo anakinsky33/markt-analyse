@@ -146,6 +146,7 @@ def fetch_fundamentals(symbol, api_key):
             prof = json.loads(r.read())
         mc = prof.get("marketCapitalization")
         return {
+            "_name":          prof.get("name"),
             "marketCap":      mc * 1e6 if mc else None,
             "trailingPE":     m.get("peTTM"),
             "forwardPE":      m.get("peNormalizedAnnual"),
@@ -418,6 +419,11 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
                 bar.progress(fortschritt + 0.6/n, text=f"{name}: Fundamentaldaten...")
                 fund_raw = fetch_fundamentals(asset["symbol"], finnhub_key)
                 err = fund_raw.pop("_error", None) if fund_raw else None
+                # Firmenname übernehmen falls vorhanden
+                company_name = fund_raw.pop("_name", None) if fund_raw else None
+                if company_name:
+                    name = f"{company_name} ({asset['symbol']})"
+                    st.subheader(name)  # Überschrift aktualisieren
                 fund = fund_raw if (fund_raw and any(v is not None for v in fund_raw.values())) else {}
                 if fund:
                     st.markdown("**Fundamentaldaten**")
@@ -465,21 +471,35 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
     bar.progress(1.0, text="Fertig ✓")
 
     # E-Mail senden
-    if send_mail and gmail_absender and gmail_passwort and empfaenger:
-        try:
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = f"Markt Analyse – {heute}"
-            msg["From"]    = gmail_absender
-            msg["To"]      = empfaenger
-            msg.attach(MIMEText(
-                f"<html><body>{mail_html}<p style='color:#aaa;font-size:11px'>Automatisch generiert – keine Anlageberatung</p></body></html>",
-                "html","utf-8"
-            ))
-            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
-                s.login(gmail_absender, gmail_passwort)
-                s.sendmail(gmail_absender, empfaenger, msg.as_string())
-            st.success(f"✅ E-Mail gesendet an {empfaenger}")
-        except Exception as e:
-            st.error(f"E-Mail-Fehler: {e}")
+    if send_mail:
+        absender = gmail_absender.strip()
+        passwort = gmail_passwort.strip().replace(" ", "")  # App-Passwort ggf. ohne Leerzeichen
+        empf     = empfaenger.strip()
+        if not (absender and passwort and empf):
+            st.warning("⚠️ E-Mail: Bitte Absender, App-Passwort und Empfänger ausfüllen.")
+        else:
+            try:
+                msg = MIMEMultipart("alternative")
+                msg["Subject"] = f"Markt Analyse – {heute}"
+                msg["From"]    = absender
+                msg["To"]      = empf
+                msg.attach(MIMEText(
+                    f"<html><body>{mail_html}<p style='color:#aaa;font-size:11px'>Automatisch generiert – keine Anlageberatung</p></body></html>",
+                    "html", "utf-8"
+                ))
+                # Erst Port 465 (SSL), Fallback Port 587 (STARTTLS)
+                try:
+                    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=20) as s:
+                        s.login(absender, passwort)
+                        s.sendmail(absender, empf, msg.as_string())
+                except Exception:
+                    with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as s:
+                        s.starttls()
+                        s.login(absender, passwort)
+                        s.sendmail(absender, empf, msg.as_string())
+                st.success(f"✅ E-Mail gesendet an {empf}")
+            except Exception as e:
+                st.error(f"E-Mail-Fehler: {e}")
+                st.info("💡 Tipp: Gmail benötigt ein App-Passwort (nicht dein normales Passwort). Aktiviere zuerst 2-Faktor-Authentifizierung, dann: Google-Konto → Sicherheit → App-Passwörter")
 
     st.balloons()

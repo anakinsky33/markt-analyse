@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import streamlit as st
-import os, json, datetime, urllib.request, time, smtplib
+import os, json, datetime, urllib.request, urllib.parse, time, smtplib
 import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -43,12 +43,31 @@ with st.sidebar:
         ausgewaehlt.append({"name": "S&P 500", "symbol": "^GSPC", "typ": "aktie", "einheit": "Punkte"})
 
     aktien_eingabe = st.text_input(
-        "Weitere Aktien (Ticker, kommagetrennt)",
-        placeholder="z.B. NVDA, AAPL, MSFT, SAP",
-        help="Yahoo Finance Ticker-Symbol eingeben, z.B. NVDA, AAPL, SAP.DE",
+        "Ticker eingeben (kommagetrennt)",
+        placeholder="z.B. NVDA, AAPL, SAP.DE",
+        help="Yahoo Finance Ticker — z.B. NVDA, AAPL, SAP.DE, SQ",
     )
     for ticker in [t.strip().upper() for t in aktien_eingabe.split(",") if t.strip()]:
         ausgewaehlt.append({"name": ticker, "symbol": ticker, "typ": "aktie", "einheit": "USD"})
+
+    with st.expander("🔍 Ticker suchen (Firmenname)"):
+        such_name = st.text_input("Firmenname", placeholder="z.B. Block, Siemens, Tesla", key="suche")
+        such_key  = get_secret("FINNHUB_API_KEY")
+        if such_name and such_key:
+            try:
+                url = f"https://finnhub.io/api/v1/search?q={urllib.parse.quote(such_name)}&token={such_key}"
+                with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0"}), timeout=10) as r:
+                    res = json.loads(r.read())
+                treffer = [x for x in res.get("result",[]) if x.get("type") in ("Common Stock","EQS")][:6]
+                if treffer:
+                    for t in treffer:
+                        st.markdown(f"**{t['displaySymbol']}** — {t['description']}")
+                else:
+                    st.info("Keine Treffer")
+            except Exception as e:
+                st.warning(f"Suche fehlgeschlagen: {e}")
+        elif such_name:
+            st.caption("Finnhub-Key wird für die Suche benötigt.")
 
     # Krypto & Edelmetalle
     for kat, assets in FESTE_ASSETS.items():
@@ -475,16 +494,46 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
 
         # 3. KI-Analyse
         analyse_text = ""
+        ki_label = ""
         if "Claude" in ai_modus and ai_key:
             bar.progress(fortschritt + 0.75/n, text=f"{name}: Claude analysiert...")
             analyse_text = ai_claude(name, typ, data, fund, prog, ai_key)
-            st.markdown("### 🔵 KI-Analyse (Claude)")
-            st.markdown(analyse_text)
+            ki_label = "🔵 KI-Analyse (Claude)"
         elif "Gemini" in ai_modus and ai_key:
             bar.progress(fortschritt + 0.75/n, text=f"{name}: Gemini analysiert...")
             analyse_text = ai_gemini(name, typ, data, fund, prog, ai_key)
-            st.markdown("### 🟢 KI-Analyse (Gemini)")
-            st.markdown(analyse_text)
+            ki_label = "🟢 KI-Analyse (Gemini)"
+
+        if analyse_text:
+            st.markdown(f"### {ki_label}")
+            # Abschnitte farbig formatieren
+            farbe_map = {
+                "1.": "#1a73e8", "2.": "#1a73e8", "3.": "#1a73e8", "4.": "#1a73e8",
+                "5.": "#1a73e8", "6.": "#555",    "7.": "#c0392b",
+            }
+            abschnitte = analyse_text.split("\n## ")
+            for i, block in enumerate(abschnitte):
+                if i == 0 and not block.startswith("#"):
+                    if block.strip():
+                        st.markdown(block)
+                    continue
+                lines = block.strip().split("\n", 1)
+                titel = lines[0].lstrip("# ").strip()
+                inhalt = lines[1].strip() if len(lines) > 1 else ""
+                nr = titel.split(".")[0].strip() + "." if "." in titel else ""
+                farbe = farbe_map.get(nr, "#555")
+                is_prognose = "7." in nr or "Prognose" in titel
+                bg = "#fff8f8" if is_prognose else "#f8f9fa"
+                border = "#c0392b" if is_prognose else farbe
+                titel_fmt  = "## " + titel
+                inhalt_html = inhalt.replace("\n", "<br>")
+                st.markdown(
+                    f'<div style="background:{bg};border-left:4px solid {border};'
+                    f'padding:12px 16px;margin:8px 0;border-radius:4px">'
+                    f'<strong style="color:{border}">{titel_fmt}</strong><br><br>'
+                    f'{inhalt_html}</div>',
+                    unsafe_allow_html=True,
+                )
 
         # HTML für E-Mail sammeln
         farbe_hex = {"aktie":"#1a73e8","krypto":"#f7931a","metall":"#FFD700"}.get(typ,"#888")

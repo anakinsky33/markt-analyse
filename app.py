@@ -14,16 +14,10 @@ def get_secret(key):
         return os.environ.get(key, "")
 
 # ── Asset-Definitionen ─────────────────────────────────────────────────────────
-KATEGORIEN = {
-    "📈 Aktien": [
-        {"name": "S&P 500",   "symbol": "^GSPC", "typ": "aktie", "einheit": "Punkte"},
-        {"name": "NVIDIA",    "symbol": "NVDA",  "typ": "aktie", "einheit": "USD"},
-        {"name": "Apple",     "symbol": "AAPL",  "typ": "aktie", "einheit": "USD"},
-        {"name": "Microsoft", "symbol": "MSFT",  "typ": "aktie", "einheit": "USD"},
-    ],
+FESTE_ASSETS = {
     "₿ Krypto": [
-        {"name": "Bitcoin",   "symbol": "BTC", "pair": "XBTUSD", "kraken": "XXBTZUSD", "typ": "krypto", "einheit": "USD"},
-        {"name": "XRP",       "symbol": "XRP", "pair": "XRPUSD", "kraken": "XXRPZUSD", "typ": "krypto", "einheit": "USD"},
+        {"name": "Bitcoin", "symbol": "BTC", "pair": "XBTUSD", "kraken": "XXBTZUSD", "typ": "krypto", "einheit": "USD"},
+        {"name": "XRP",     "symbol": "XRP", "pair": "XRPUSD", "kraken": "XXRPZUSD", "typ": "krypto", "einheit": "USD"},
     ],
     "🥇 Edelmetalle": [
         {"name": "Gold",   "symbol": "GC=F", "typ": "metall", "einheit": "USD/oz"},
@@ -41,9 +35,23 @@ YAHOO_HEADERS = {
 with st.sidebar:
     st.title("📊 Markt Analyse")
 
-    # Asset-Auswahl
     ausgewaehlt = []
-    for kat, assets in KATEGORIEN.items():
+
+    # Aktien: S&P 500 fest + freie Eingabe
+    st.subheader("📈 Aktien")
+    if st.checkbox("S&P 500 (^GSPC)", value=True, key="sp500"):
+        ausgewaehlt.append({"name": "S&P 500", "symbol": "^GSPC", "typ": "aktie", "einheit": "Punkte"})
+
+    aktien_eingabe = st.text_input(
+        "Weitere Aktien (Ticker, kommagetrennt)",
+        placeholder="z.B. NVDA, AAPL, MSFT, SAP",
+        help="Yahoo Finance Ticker-Symbol eingeben, z.B. NVDA, AAPL, SAP.DE",
+    )
+    for ticker in [t.strip().upper() for t in aktien_eingabe.split(",") if t.strip()]:
+        ausgewaehlt.append({"name": ticker, "symbol": ticker, "typ": "aktie", "einheit": "USD"})
+
+    # Krypto & Edelmetalle
+    for kat, assets in FESTE_ASSETS.items():
         st.subheader(kat)
         for a in assets:
             if st.checkbox(a["name"], value=True, key=a["symbol"]):

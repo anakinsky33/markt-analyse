@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "1.8.0"
+APP_VERSION = "1.9.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -363,6 +363,7 @@ def ai_claude(name, typ, data, fund, prog, key):
 def ai_gemini(name, typ, data, fund, prog, key):
     prompt = _build_prompt(name, typ, data, fund, prog)
     body = json.dumps({"contents":[{"parts":[{"text":prompt}]}]}).encode()
+    rate_limited = False
     for model in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash-lite"]:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
@@ -373,9 +374,12 @@ def ai_gemini(name, typ, data, fund, prog, key):
         except Exception as e:
             err = str(e)
             if "429" in err:
-                return "⚠️ Gemini: Rate-Limit erreicht. Bitte einige Minuten warten und erneut versuchen."
+                rate_limited = True
+                continue  # nächstes Modell versuchen
             if "404" not in err:
                 return f"⚠️ Gemini-Fehler: {e}"
+    if rate_limited:
+        return "⚠️ Gemini: Rate-Limit auf allen Modellen erreicht. Bitte einige Minuten warten und erneut versuchen."
     return "⚠️ Gemini-Fehler: Kein verfügbares Modell gefunden"
 
 # ── Darstellung (identisch mit bewährtem E-Mail-Format) ───────────────────────

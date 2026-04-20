@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.1.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -77,6 +77,15 @@ with st.sidebar:
         for a in assets:
             if st.checkbox(a["name"], value=False, key=a["symbol"]):
                 ausgewaehlt.append(a)
+        if kat == "₿ Krypto":
+            krypto_eingabe = st.text_input(
+                "Weitere Coins (kommagetrennt)",
+                placeholder="z.B. ETH, SOL, DOGE",
+                help="Coin-Symbol eingeben — Daten via Yahoo Finance ({COIN}-USD)",
+                key="krypto_extra",
+            )
+            for coin in [c.strip().upper() for c in krypto_eingabe.split(",") if c.strip()]:
+                ausgewaehlt.append({"name": coin, "symbol": f"{coin}-USD", "typ": "krypto", "einheit": "USD", "yahoo_krypto": True})
 
     st.divider()
 
@@ -363,7 +372,8 @@ def ai_claude(name, typ, data, fund, prog, key):
 
 def ai_gemini(name, typ, data, fund, prog, key):
     prompt = _build_prompt(name, typ, data, fund, prog, history_days=14, short=True)
-    body = json.dumps({"contents":[{"parts":[{"text":prompt}]}]}).encode()
+    body = json.dumps({"contents":[{"parts":[{"text":prompt}]}],
+                       "generationConfig":{"maxOutputTokens":800,"temperature":0.7}}).encode()
     rate_limited = False
     for model in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash-lite"]:
         try:
@@ -562,7 +572,7 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
 
         # Kursdaten
         try:
-            if typ == "krypto":
+            if typ == "krypto" and not asset.get("yahoo_krypto"):
                 raw = fetch_kraken(asset["pair"], asset["kraken"])
             else:
                 raw = fetch_yahoo(asset["symbol"])

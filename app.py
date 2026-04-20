@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.5.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -370,7 +370,10 @@ def ai_gemini(name, typ, data, fund, prog, key):
                 resp = json.loads(r.read())
             return resp["candidates"][0]["content"]["parts"][0]["text"]
         except Exception as e:
-            if "404" not in str(e):
+            err = str(e)
+            if "429" in err:
+                return "⚠️ Gemini: Rate-Limit erreicht. Bitte einige Minuten warten und erneut versuchen."
+            if "404" not in err:
                 return f"⚠️ Gemini-Fehler: {e}"
     return "⚠️ Gemini-Fehler: Kein verfügbares Modell gefunden"
 

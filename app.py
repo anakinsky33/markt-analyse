@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "2.4.0"
+APP_VERSION = "2.5.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -148,28 +148,21 @@ def fetch_yahoo(symbol, days=400):
             for ts, c in zip(result["timestamp"], result["indicators"]["quote"][0]["close"])
             if c is not None and c > 0]
 
-def fetch_coingecko(coin, days=720):
-    # Coin-ID ermitteln
-    search_url = f"https://api.coingecko.com/api/v3/search?query={urllib.parse.quote(coin)}"
-    req = urllib.request.Request(search_url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=15) as r:
-        results = json.loads(r.read())
-    coins = results.get("coins", [])
-    if not coins:
-        raise Exception(f"'{coin}' nicht auf CoinGecko gefunden")
-    coin_id = coins[0]["id"]
-
-    # Tagespreise abrufen
-    chart_url = (f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart"
-                 f"?vs_currency=usd&days={days}&interval=daily")
-    req = urllib.request.Request(chart_url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
+def fetch_kraken_coin(coin, days=720):
+    pair  = coin.upper() + "USD"
+    since = int((datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)).timestamp())
+    url   = f"https://api.kraken.com/0/public/OHLC?pair={pair}&interval=1440&since={since}"
+    req   = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=20) as r:
         data = json.loads(r.read())
-    prices = data.get("prices", [])
-    if not prices:
-        raise Exception(f"Keine Preisdaten für {coin_id}")
-    return [{"date": datetime.date.fromtimestamp(ts // 1000).isoformat(), "close": round(float(p), 8)}
-            for ts, p in prices]
+    if data.get("error") and data["error"]:
+        raise Exception(f"Kraken: {data['error']}")
+    result_key = next(k for k in data["result"] if k != "last")
+    candles = data["result"][result_key]
+    if not candles:
+        raise Exception(f"Keine Daten für {pair} auf Kraken")
+    return [{"date": datetime.date.fromtimestamp(int(c[0])).isoformat(), "close": round(float(c[4]), 8)}
+            for c in candles if float(c[4]) > 0]
 
 def fetch_kraken(pair, kraken_key, days=720):
     since = int((datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)).timestamp())
@@ -612,12 +605,12 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
                 raw = fetch_kraken(asset["pair"], asset["kraken"])
             elif asset.get("yahoo_krypto"):
                 try:
-                    raw = fetch_coingecko(asset["name"])
-                except Exception as e_cg:
+                    raw = fetch_kraken_coin(asset["name"])
+                except Exception as e_kr:
                     try:
                         raw = fetch_yahoo(asset["symbol"])
                     except Exception as e_yahoo:
-                        raise Exception(f"CoinGecko: {e_cg} | Yahoo: {e_yahoo}")
+                        raise Exception(f"Kraken: {e_kr} | Yahoo: {e_yahoo}")
             else:
                 raw = fetch_yahoo(asset["symbol"])
             data = build(raw)

@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "2.2.0"
+APP_VERSION = "2.3.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -147,6 +147,19 @@ def fetch_yahoo(symbol, days=400):
     return [{"date": datetime.date.fromtimestamp(ts).isoformat(), "close": round(float(c), 4)}
             for ts, c in zip(result["timestamp"], result["indicators"]["quote"][0]["close"])
             if c is not None and c > 0]
+
+def fetch_binance(coin, days=720):
+    symbol = coin.upper().rstrip("USD").rstrip("-") + "USDT"
+    limit  = min(days, 1000)
+    url    = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1d&limit={limit}"
+    req    = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        candles = json.loads(r.read())
+    if not candles:
+        raise Exception(f"Keine Daten für {symbol}")
+    return [{"date": datetime.date.fromtimestamp(int(c[0]) // 1000).isoformat(),
+             "close": round(float(c[4]), 8)}
+            for c in candles if float(c[4]) > 0]
 
 def fetch_kraken(pair, kraken_key, days=720):
     since = int((datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)).timestamp())
@@ -587,6 +600,14 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
         try:
             if typ == "krypto" and not asset.get("yahoo_krypto"):
                 raw = fetch_kraken(asset["pair"], asset["kraken"])
+            elif asset.get("yahoo_krypto"):
+                try:
+                    raw = fetch_binance(asset["name"])
+                except Exception as e_binance:
+                    try:
+                        raw = fetch_yahoo(asset["symbol"])
+                    except Exception as e_yahoo:
+                        raise Exception(f"Binance: {e_binance} | Yahoo: {e_yahoo}")
             else:
                 raw = fetch_yahoo(asset["symbol"])
             data = build(raw)

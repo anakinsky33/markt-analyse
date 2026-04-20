@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "1.6.0"
+APP_VERSION = "1.7.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -320,31 +320,32 @@ AKTUELL ({last['date']}):
 LETZTE 30 TAGE:
 {history}
 
-Erstelle eine vollständige technische Analyse:
+Antworte OHNE Markdown-Tabellen, OHNE Code-Blöcke, OHNE --- Trennlinien. Nur Fliesstext und Aufzählungen.
+Beginne IMMER mit der 48h-Prognose, dann folgt die detaillierte Analyse.
 
-## 1. Elliott-Wellen-Analyse
-Aktive Welle? Impuls oder Korrektur? Position im Zyklus?
-
-## 2. EMA-Trendstruktur
-Preis vs. EMA50 vs. EMA200. Golden Cross / Death Cross? Trendstärke?
-
-## 3. RSI-Analyse
-Momentum, überkauft/überverkauft, Divergenzen?
-
-## 4. MACD-Analyse
-Crossover, Histogramm-Richtung, Momentum-Veränderung?
-
-{sektion5}
-
-## 6. Gesamtbild & Schlüsselniveaus
-Übergeordneter Bias + konkrete Support- und Resistance-Zonen.
-
-## 7. 2-Tages-Prognose (48h)
+## 1. 2-Tages-Prognose (48h)
 - HAUPTSZENARIO (XX% Wahrscheinlichkeit): Konkreter Kursverlauf mit Zielkurs und % Veränderung.
 - ALTERNATIVSZENARIO (XX% Wahrscheinlichkeit): Gegenszenario mit Kursziel.
 - ENTSCHEIDENDE MARKEN: Welche Levels bestimmen das Szenario?
 - INVALIDIERUNGSLEVEL: Ab welchem Kurs wird das Hauptszenario ungültig?
-- HANDLUNGSEMPFEHLUNG: Klar und direkt."""
+- HANDLUNGSEMPFEHLUNG: Klar und direkt.
+
+## 2. Elliott-Wellen-Analyse
+Aktive Welle? Impuls oder Korrektur? Position im Zyklus?
+
+## 3. EMA-Trendstruktur
+Preis vs. EMA50 vs. EMA200. Golden Cross / Death Cross? Trendstärke?
+
+## 4. RSI-Analyse
+Momentum, überkauft/überverkauft, Divergenzen?
+
+## 5. MACD-Analyse
+Crossover, Histogramm-Richtung, Momentum-Veränderung?
+
+{sektion5}
+
+## 7. Gesamtbild & Schlüsselniveaus
+Übergeordneter Bias + konkrete Support- und Resistance-Zonen."""
 
 def ai_claude(name, typ, data, fund, prog, key):
     try:
@@ -352,7 +353,7 @@ def ai_claude(name, typ, data, fund, prog, key):
         client = anthropic.Anthropic(api_key=key)
         msg = client.messages.create(
             model="claude-haiku-4-5",
-            max_tokens=2500,
+            max_tokens=4000,
             messages=[{"role":"user","content":_build_prompt(name,typ,data,fund,prog)}],
         )
         return msg.content[0].text
@@ -413,37 +414,58 @@ def render_card(name, typ, einheit, last, prog, fund, analyse_text):
 <tr style="background:white"><td style="padding:8px 12px;color:#555;font-size:13px">Gewinnmarge / ROE</td><td style="color:#333;font-weight:bold">{pct(fund.get("profitMargins"))} / {pct(fund.get("returnOnEquity"))}</td><td></td></tr>
 <tr style="background:#f9f9f9"><td style="padding:8px 12px;color:#555;font-size:13px">52W-Hoch / Tief</td><td style="color:#333;font-weight:bold">{fp(fund.get("week52High"))} / {fp(fund.get("week52Low"))}</td><td></td></tr>"""
 
-    # Analyse-Text: ## und ** in HTML umwandeln, Sektion 7 (48h) extrahieren
+    # Analyse-Text: Markdown → HTML (vollständig)
     import html as hl, re
 
-    def _fmt(text):
-        t = hl.escape(text)
+    def _inline(t):
         t = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', t)
+        t = re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', r'<em>\1</em>', t)
+        t = re.sub(r'`([^`]+)`', r'<code style="background:#f0f0f0;padding:1px 4px;border-radius:3px;font-family:monospace;font-size:12px;color:#c0392b">\1</code>', t)
         return t
 
     def _lines_to_html(lines):
-        out = ""
+        out = []; in_code = False; table_hdr = True
         for line in lines:
             s = line.strip()
-            if not s:
+            if s.startswith("```"):
+                if in_code: out.append("</pre>"); in_code = False
+                else: out.append('<pre style="background:#f5f5f5;padding:10px;border-radius:4px;font-size:12px;color:#333;margin:6px 0;white-space:pre-wrap">'); in_code = True
                 continue
-            if s.startswith("## "):
+            if in_code: out.append(hl.escape(line) + "\n"); continue
+            if s.startswith("|") and "|" in s[1:]:
+                if re.match(r'^\|[\s\-\:\|]+\|$', s):
+                    table_hdr = False; continue
+                cells = [c.strip() for c in s.split("|")[1:-1]]
+                if table_hdr:
+                    row = "".join(f'<th style="padding:5px 10px;background:#2c3e50;color:white;text-align:left;font-size:11px;font-weight:bold">{_inline(hl.escape(c.replace("**","")))}</th>' for c in cells)
+                    out.append(f'<table style="width:100%;border-collapse:collapse;margin:8px 0;font-size:12px"><tr>{row}</tr>')
+                else:
+                    row = "".join(f'<td style="padding:5px 10px;border-bottom:1px solid #eee;color:#333">{_inline(hl.escape(c))}</td>' for c in cells)
+                    out.append(f"<tr>{row}</tr>")
+                continue
+            else:
+                if not table_hdr: out.append("</table>"); table_hdr = True
+            if re.match(r'^[-\*_]{3,}$', s): continue
+            if not s: continue
+            if s.startswith("#### "): out.append(f'<p style="color:#555;font-weight:bold;font-size:12px;margin:10px 0 2px 0">{_inline(hl.escape(s[5:]))}</p>')
+            elif s.startswith("### "): out.append(f'<p style="color:#2c3e50;font-weight:bold;font-size:13px;margin:12px 0 4px 0">{_inline(hl.escape(s[4:]))}</p>')
+            elif s.startswith("## "):
                 sec = s[3:]
-                is_p = any(x in sec for x in ["7.", "2-Tages", "Prognose", "48h"])
-                bc  = "#e74c3c" if is_p else farbe
-                col = "#c0392b" if is_p else "#2c3e50"
-                out += (f'<p style="color:{col};font-weight:bold;font-size:14px;'
-                        f'border-bottom:2px solid {bc};padding-bottom:4px;margin-top:18px">'
-                        f'{hl.escape(sec)}</p>')
+                is_p = any(x in sec for x in ["48h","2-Tages","Prognose","1."])
+                bc = "#e74c3c" if is_p else farbe; col = "#c0392b" if is_p else "#2c3e50"
+                out.append(f'<p style="color:{col};font-weight:bold;font-size:14px;border-bottom:2px solid {bc};padding-bottom:4px;margin-top:18px">{hl.escape(sec)}</p>')
+            elif s.startswith("# "): out.append(f'<p style="color:#1a1a2e;font-weight:bold;font-size:15px;margin-top:16px;border-bottom:2px solid {farbe};padding-bottom:4px">{hl.escape(s[2:])}</p>')
             else:
                 kw = re.sub(r'^[\-\s\*]+', '', s)
-                if any(kw.startswith(k) for k in ["HAUPTSZENARIO", "ALTERNATIVSZENARIO"]):
-                    out += f'<p style="margin:5px 0;color:#c0392b;font-weight:bold">{_fmt(s)}</p>'
-                elif any(kw.startswith(k) for k in ["ENTSCHEIDENDE", "INVALIDIERUNG", "HANDLUNG"]):
-                    out += f'<p style="margin:5px 0;color:#e67e22;font-weight:bold">{_fmt(s)}</p>'
+                if any(kw.startswith(k) for k in ["HAUPTSZENARIO","ALTERNATIVSZENARIO"]):
+                    out.append(f'<p style="margin:5px 0;color:#c0392b;font-weight:bold">{_inline(hl.escape(s))}</p>')
+                elif any(kw.startswith(k) for k in ["ENTSCHEIDENDE","INVALIDIERUNG","HANDLUNG"]):
+                    out.append(f'<p style="margin:5px 0;color:#e67e22;font-weight:bold">{_inline(hl.escape(s))}</p>')
                 else:
-                    out += f'<p style="margin:3px 0;color:#333;font-size:13px;line-height:1.6">{_fmt(s)}</p>'
-        return out
+                    out.append(f'<p style="margin:3px 0;color:#333;font-size:13px;line-height:1.6">{_inline(hl.escape(s))}</p>')
+        if not table_hdr: out.append("</table>")
+        if in_code: out.append("</pre>")
+        return "".join(out)
 
     prognose_html = rest_html = ""
     if analyse_text:
@@ -452,7 +474,7 @@ def render_card(name, typ, einheit, last, prog, fund, analyse_text):
         for line in analyse_text.split("\n"):
             if line.strip().startswith("## "):
                 sec = line.strip()[3:]
-                in_prog = any(x in sec for x in ["7.", "2-Tages", "Prognose", "48h"])
+                in_prog = any(x in sec for x in ["1.", "48h", "2-Tages", "Prognose"])
             (prog_lines if in_prog else rest_lines).append(line)
         prognose_html = _lines_to_html(prog_lines)
         rest_html     = _lines_to_html(rest_lines)

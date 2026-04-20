@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "1.5.0"
+APP_VERSION = "1.6.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -413,23 +413,56 @@ def render_card(name, typ, einheit, last, prog, fund, analyse_text):
 <tr style="background:white"><td style="padding:8px 12px;color:#555;font-size:13px">Gewinnmarge / ROE</td><td style="color:#333;font-weight:bold">{pct(fund.get("profitMargins"))} / {pct(fund.get("returnOnEquity"))}</td><td></td></tr>
 <tr style="background:#f9f9f9"><td style="padding:8px 12px;color:#555;font-size:13px">52W-Hoch / Tief</td><td style="color:#333;font-weight:bold">{fp(fund.get("week52High"))} / {fp(fund.get("week52Low"))}</td><td></td></tr>"""
 
-    # Analyse-Text
-    analyse_html = ""
+    # Analyse-Text: ## und ** in HTML umwandeln, Sektion 7 (48h) extrahieren
+    import html as hl, re
+
+    def _fmt(text):
+        t = hl.escape(text)
+        t = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', t)
+        return t
+
+    def _lines_to_html(lines):
+        out = ""
+        for line in lines:
+            s = line.strip()
+            if not s:
+                continue
+            if s.startswith("## "):
+                sec = s[3:]
+                is_p = any(x in sec for x in ["7.", "2-Tages", "Prognose", "48h"])
+                bc  = "#e74c3c" if is_p else farbe
+                col = "#c0392b" if is_p else "#2c3e50"
+                out += (f'<p style="color:{col};font-weight:bold;font-size:14px;'
+                        f'border-bottom:2px solid {bc};padding-bottom:4px;margin-top:18px">'
+                        f'{hl.escape(sec)}</p>')
+            else:
+                kw = re.sub(r'^[\-\s\*]+', '', s)
+                if any(kw.startswith(k) for k in ["HAUPTSZENARIO", "ALTERNATIVSZENARIO"]):
+                    out += f'<p style="margin:5px 0;color:#c0392b;font-weight:bold">{_fmt(s)}</p>'
+                elif any(kw.startswith(k) for k in ["ENTSCHEIDENDE", "INVALIDIERUNG", "HANDLUNG"]):
+                    out += f'<p style="margin:5px 0;color:#e67e22;font-weight:bold">{_fmt(s)}</p>'
+                else:
+                    out += f'<p style="margin:3px 0;color:#333;font-size:13px;line-height:1.6">{_fmt(s)}</p>'
+        return out
+
+    prognose_html = rest_html = ""
     if analyse_text:
-        import html as hl
+        in_prog = False
+        prog_lines, rest_lines = [], []
         for line in analyse_text.split("\n"):
-            if line.startswith("## "):
-                sec = line[3:]
-                is_p = "7." in sec or "Prognose" in sec or "48h" in sec
-                bc = "#e74c3c" if is_p else farbe
-                tc2 = "#c0392b" if is_p else "#2c3e50"
-                analyse_html += f'<p style="color:{tc2};font-weight:bold;font-size:14px;border-bottom:2px solid {bc};padding-bottom:4px;margin-top:18px">{hl.escape(sec)}</p>'
-            elif any(line.startswith(f"- {k}") for k in ["HAUPTSZENARIO", "ALTERNATIVSZENARIO"]):
-                analyse_html += f'<p style="margin:5px 0;color:#c0392b;font-weight:bold">{hl.escape(line)}</p>'
-            elif any(line.startswith(f"- {k}") for k in ["ENTSCHEIDENDE", "INVALIDIERUNG", "HANDLUNG"]):
-                analyse_html += f'<p style="margin:5px 0;color:#e67e22;font-weight:bold">{hl.escape(line)}</p>'
-            elif line.strip():
-                analyse_html += f'<p style="margin:3px 0;color:#333;font-size:13px;line-height:1.6">{hl.escape(line)}</p>'
+            if line.strip().startswith("## "):
+                sec = line.strip()[3:]
+                in_prog = any(x in sec for x in ["7.", "2-Tages", "Prognose", "48h"])
+            (prog_lines if in_prog else rest_lines).append(line)
+        prognose_html = _lines_to_html(prog_lines)
+        rest_html     = _lines_to_html(rest_lines)
+
+    prognose_row = ""
+    if prognose_html:
+        prognose_row = f'<tr><td style="background:#fff8f0;padding:16px 20px;border-left:4px solid #e74c3c">{prognose_html}</td></tr>'
+    rest_row = ""
+    if rest_html:
+        rest_row = f'<tr><td style="background:white;padding:20px">{rest_html}</td></tr>'
 
     return f"""
 <table width="100%" cellpadding="0" cellspacing="0" style="max-width:680px;margin:0 auto 30px auto;font-family:Arial,sans-serif;border-collapse:collapse">
@@ -474,7 +507,8 @@ def render_card(name, typ, einheit, last, prog, fund, analyse_text):
       {fund_rows}
     </table>
   </td></tr>
-  {"" if not analyse_text else f'<tr><td style="background:white;padding:20px">{analyse_html}</td></tr>'}
+  {prognose_row}
+  {rest_row}
   <tr><td style="padding:10px;text-align:center;font-size:11px;color:#aaa;background:#f9f9f9">Keine Anlageberatung · Daten: Yahoo Finance / Kraken</td></tr>
 </table>
 <br>"""

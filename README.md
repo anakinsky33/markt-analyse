@@ -10,9 +10,10 @@ Streamlit-App für tägliche technische Analysen von Aktien, Krypto und Edelmeta
 
 ### Assets
 - **Aktien** — S&P 500 fest + beliebige Ticker (kommagetrennt, z.B. `NVDA, SAP.DE`)
-- **Krypto** — Bitcoin & XRP (Daten via Kraken API)
+- **Krypto** — Bitcoin & XRP (Daten via Kraken API) + beliebige Coins (kommagetrennt, z.B. `ETH, SOL, DOGE`) via Yahoo Finance
 - **Edelmetalle** — Gold & Silber (Daten via Yahoo Finance)
 - **Ticker-Suche** — Firmenname eingeben → Ticker per Finnhub-Suche finden
+- **Alle Assets standardmäßig abgewählt** — nur gewünschte Assets ankreuzen
 
 ### Technische Analyse
 - Elliott-Wellen-Analyse
@@ -25,10 +26,16 @@ Streamlit-App für tägliche technische Analysen von Aktien, Krypto und Edelmeta
 | Modus | Modell | Hinweis |
 |-------|--------|---------|
 | Regelbasiert | — | Kein API-Key nötig |
-| Claude (Anthropic) | claude-haiku-4-5 | `sk-ant-...` Key |
-| Gemini (Google) | gemini-2.0-flash | `AIza...` Key, Free Tier |
+| Claude (Anthropic) | claude-haiku-4-5 | `sk-ant-...` Key, max 4000 Token |
+| Gemini (Google) | gemini-2.0-flash → 1.5-flash → 1.5-flash-latest → 2.0-flash-lite | `AIza...` Key, Free Tier 1500 Req/Tag |
 
 Die KI beginnt **immer mit der 48h-Prognose + Handlungsempfehlung**, gefolgt von der detaillierten Analyse (Elliott, EMA, RSI, MACD, Fundamentals, Gesamtbild).
+
+**Gemini Free Tier Hinweise:**
+- Fallback-Kette: Bei 429-Fehler wird automatisch das nächste Modell versucht
+- Prompt optimiert: 14 Tage History, max. 800 Output-Token — minimierter Tokenverbrauch
+- Tageslimit: Free Tier erlaubt 1500 Requests/Tag — bei Erschöpfung erst am nächsten Tag wieder verfügbar
+- Fehlermeldungen zeigen den genauen Grund (RPM-, RPD- oder Kontolimit)
 
 ### Darstellung
 - Gestylte Karte pro Asset: dunkler Header, Prognose-Banner, Kursziel-Boxen, Indikatortabelle
@@ -65,7 +72,7 @@ EMPFAENGER         = "empfaenger@mail.com"
 
 | Quelle | Verwendung | Kosten |
 |--------|-----------|--------|
-| Yahoo Finance v8 | Aktien & Edelmetall OHLC | kostenlos |
+| Yahoo Finance v8 | Aktien, Edelmetalle & benutzerdefinierte Coins OHLC | kostenlos |
 | Kraken Public API | BTC & XRP OHLC (Daily) | kostenlos |
 | Finnhub | Fundamentaldaten, Ticker-Suche | kostenlos (Free Tier) |
 
@@ -75,6 +82,10 @@ EMPFAENGER         = "empfaenger@mail.com"
 
 | Version | Änderung |
 |---------|----------|
+| 2.2.0 | Gemini HTTP-Fehlerdetails aus Response-Body; genaue Fehlerbeschreibung in der App |
+| 2.1.0 | Gemini maxOutputTokens=800; Krypto-Freifeld für beliebige Coins via Yahoo Finance |
+| 2.0.0 | Gemini-Prompt auf 14 Tage History + 500 Wörter begrenzt; alle Checkboxen leer per Standard |
+| 1.9.0 | Gemini 429: Fallback auf nächstes Modell statt sofortiger Abbruch |
 | 1.8.0 | Schlüsselwörter farbig, Erklärungstext schwarz; iframe-Höhe 5000 |
 | 1.7.0 | 48h-Prognose zuerst im Prompt; vollständiger Markdown-Konverter; max_tokens 4000 |
 | 1.6.0 | 48h-Prognose vor Detailanalyse; `##`/`**` durch HTML ersetzt |

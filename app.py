@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 import streamlit as st
-import os, json, datetime, urllib.request, urllib.parse, time, smtplib
+import os, json, datetime, urllib.request, urllib.parse, urllib.error, time, smtplib
 import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "2.1.0"
+APP_VERSION = "2.2.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -375,6 +375,7 @@ def ai_gemini(name, typ, data, fund, prog, key):
     body = json.dumps({"contents":[{"parts":[{"text":prompt}]}],
                        "generationConfig":{"maxOutputTokens":800,"temperature":0.7}}).encode()
     rate_limited = False
+    last_detail = ""
     for model in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash-lite"]:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
@@ -382,15 +383,27 @@ def ai_gemini(name, typ, data, fund, prog, key):
             with urllib.request.urlopen(req, timeout=45) as r:
                 resp = json.loads(r.read())
             return resp["candidates"][0]["content"]["parts"][0]["text"]
+        except urllib.error.HTTPError as e:
+            try:
+                detail = json.loads(e.read().decode()).get("error", {}).get("message", "")
+                last_detail = detail
+            except Exception:
+                detail = ""
+            if e.code == 429:
+                rate_limited = True
+                continue
+            if e.code != 404:
+                return f"⚠️ Gemini-Fehler ({e.code}): {detail or e.reason}"
         except Exception as e:
             err = str(e)
             if "429" in err:
                 rate_limited = True
-                continue  # nächstes Modell versuchen
+                continue
             if "404" not in err:
                 return f"⚠️ Gemini-Fehler: {e}"
     if rate_limited:
-        return "⚠️ Gemini: Rate-Limit auf allen Modellen erreicht. Bitte einige Minuten warten und erneut versuchen."
+        hint = f" — {last_detail}" if last_detail else ""
+        return f"⚠️ Gemini: Rate-Limit auf allen Modellen erreicht{hint}. Tipp: Tageskontingent (Free Tier = 1500 Req/Tag) evtl. erschöpft — morgen erneut versuchen oder Google AI Studio → Quota prüfen."
     return "⚠️ Gemini-Fehler: Kein verfügbares Modell gefunden"
 
 # ── Darstellung (identisch mit bewährtem E-Mail-Format) ───────────────────────

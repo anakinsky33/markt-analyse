@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "1.9.0"
+APP_VERSION = "2.0.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -41,7 +41,7 @@ with st.sidebar:
 
     # Aktien: S&P 500 fest + freie Eingabe
     st.subheader("📈 Aktien")
-    if st.checkbox("S&P 500 (^GSPC)", value=True, key="sp500"):
+    if st.checkbox("S&P 500 (^GSPC)", value=False, key="sp500"):
         ausgewaehlt.append({"name": "S&P 500", "symbol": "^GSPC", "typ": "aktie", "einheit": "Punkte"})
 
     aktien_eingabe = st.text_input(
@@ -75,7 +75,7 @@ with st.sidebar:
     for kat, assets in FESTE_ASSETS.items():
         st.subheader(kat)
         for a in assets:
-            if st.checkbox(a["name"], value=True, key=a["symbol"]):
+            if st.checkbox(a["name"], value=False, key=a["symbol"]):
                 ausgewaehlt.append(a)
 
     st.divider()
@@ -268,17 +268,16 @@ def generate_prognose(data):
     }
 
 # ── KI-Analyse ─────────────────────────────────────────────────────────────────
-def _build_prompt(name, typ, data, fund, prog):
+def _build_prompt(name, typ, data, fund, prog, history_days=30, short=False):
     last = data[-1]
     def fp(v): return f"{v:.4f}" if v else "—"
     def px(v): return f"{v:,.4f}" if v else "—"
     def pct(v): return f"{v*100:.1f}%" if v else "—"
     f = fund or {}
 
-    # Letzte 30 Tage als Kontext
     history = "\n".join(
         f"  {d['date']}: {px(d['price'])} | RSI:{d['rsi']} | MACD:{d['macd']} | Hist:{d['hist']}"
-        for d in data[-30:]
+        for d in data[-history_days:]
     )
 
     fund_block = ""
@@ -306,6 +305,8 @@ FUNDAMENTALDATEN:
         "## 5. Marktsentiment & Makrofaktoren\nWas treibt den Markt aktuell? Welche externen Faktoren sind relevant?"
     )
 
+    kompakt = "\nAntworte kompakt und präzise, maximal 500 Wörter insgesamt." if short else ""
+
     return f"""{system}
 
 AKTUELL ({last['date']}):
@@ -317,10 +318,10 @@ AKTUELL ({last['date']}):
 - Regelbasierter Trend: {trend} ({prog['bull_pct']}% Bull / {prog['bear_pct']}% Bear)
 {fund_block}
 
-LETZTE 30 TAGE:
+LETZTE {history_days} TAGE:
 {history}
 
-Antworte OHNE Markdown-Tabellen, OHNE Code-Blöcke, OHNE --- Trennlinien. Nur Fliesstext und Aufzählungen.
+Antworte OHNE Markdown-Tabellen, OHNE Code-Blöcke, OHNE --- Trennlinien. Nur Fliesstext und Aufzählungen.{kompakt}
 Beginne IMMER mit der 48h-Prognose, dann folgt die detaillierte Analyse.
 
 ## 1. 2-Tages-Prognose (48h)
@@ -361,7 +362,7 @@ def ai_claude(name, typ, data, fund, prog, key):
         return f"⚠️ Claude-Fehler: {e}"
 
 def ai_gemini(name, typ, data, fund, prog, key):
-    prompt = _build_prompt(name, typ, data, fund, prog)
+    prompt = _build_prompt(name, typ, data, fund, prog, history_days=14, short=True)
     body = json.dumps({"contents":[{"parts":[{"text":prompt}]}]}).encode()
     rate_limited = False
     for model in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash-lite"]:

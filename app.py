@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "1.7.0"
+APP_VERSION = "1.8.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -458,9 +458,13 @@ def render_card(name, typ, einheit, last, prog, fund, analyse_text):
             else:
                 kw = re.sub(r'^[\-\s\*]+', '', s)
                 if any(kw.startswith(k) for k in ["HAUPTSZENARIO","ALTERNATIVSZENARIO"]):
-                    out.append(f'<p style="margin:5px 0;color:#c0392b;font-weight:bold">{_inline(hl.escape(s))}</p>')
+                    label, sep, rest = kw.partition(":")
+                    lbl_html = f'<strong style="color:#c0392b">{_inline(hl.escape("- " + label))}</strong>'
+                    out.append(f'<p style="margin:5px 0">{lbl_html}{hl.escape(sep)}<span style="color:#333">{_inline(hl.escape(rest))}</span></p>')
                 elif any(kw.startswith(k) for k in ["ENTSCHEIDENDE","INVALIDIERUNG","HANDLUNG"]):
-                    out.append(f'<p style="margin:5px 0;color:#e67e22;font-weight:bold">{_inline(hl.escape(s))}</p>')
+                    label, sep, rest = kw.partition(":")
+                    lbl_html = f'<strong style="color:#e67e22">{_inline(hl.escape("- " + label))}</strong>'
+                    out.append(f'<p style="margin:5px 0">{lbl_html}{hl.escape(sep)}<span style="color:#333">{_inline(hl.escape(rest))}</span></p>')
                 else:
                     out.append(f'<p style="margin:3px 0;color:#333;font-size:13px;line-height:1.6">{_inline(hl.escape(s))}</p>')
         if not table_hdr: out.append("</table>")
@@ -594,8 +598,8 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
         full_html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>body{{margin:0;padding:0;background:transparent}}</style></head>
 <body>{card_html}</body></html>"""
-        height = 2400 if analyse_text else 800
-        components.html(full_html, height=height, scrolling=False)
+        height = 5000 if analyse_text else 900
+        components.html(full_html, height=height, scrolling=True)
 
         # HTML für E-Mail sammeln (gleiches Format wie App-Karte)
         mail_html += render_card(name, typ, einheit, last, prog, fund, analyse_text)

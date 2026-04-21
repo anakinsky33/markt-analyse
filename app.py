@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "2.6.0"
+APP_VERSION = "2.7.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -402,35 +402,40 @@ def ai_gemini(name, typ, data, fund, prog, key):
                        "generationConfig":{"maxOutputTokens":800,"temperature":0.7}}).encode()
     rate_limited = False
     last_detail = ""
-    for model in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash-lite"]:
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
-            req = urllib.request.Request(url, data=body, headers={"Content-Type":"application/json"})
-            with urllib.request.urlopen(req, timeout=45) as r:
-                resp = json.loads(r.read())
-            return resp["candidates"][0]["content"]["parts"][0]["text"]
-        except urllib.error.HTTPError as e:
+    errors = []
+    for model in ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash", "gemini-1.5-flash-8b"]:
+        for api_ver in ["v1", "v1beta"]:
             try:
-                detail = json.loads(e.read().decode()).get("error", {}).get("message", "")
-                last_detail = detail
-            except Exception:
-                detail = ""
-            if e.code == 429:
-                rate_limited = True
-                continue
-            if e.code != 404:
+                url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{model}:generateContent?key={key}"
+                req = urllib.request.Request(url, data=body, headers={"Content-Type":"application/json"})
+                with urllib.request.urlopen(req, timeout=45) as r:
+                    resp = json.loads(r.read())
+                return resp["candidates"][0]["content"]["parts"][0]["text"]
+            except urllib.error.HTTPError as e:
+                try:
+                    detail = json.loads(e.read().decode()).get("error", {}).get("message", "")
+                    last_detail = detail
+                except Exception:
+                    detail = ""
+                if e.code == 429:
+                    rate_limited = True
+                    break  # nächstes Modell
+                if e.code == 404:
+                    errors.append(f"{model}/{api_ver}:404")
+                    continue  # nächste API-Version
                 return f"⚠️ Gemini-Fehler ({e.code}): {detail or e.reason}"
-        except Exception as e:
-            err = str(e)
-            if "429" in err:
-                rate_limited = True
-                continue
-            if "404" not in err:
-                return f"⚠️ Gemini-Fehler: {e}"
+            except Exception as e:
+                err = str(e)
+                if "429" in err:
+                    rate_limited = True
+                    break
+                if "404" not in err:
+                    return f"⚠️ Gemini-Fehler: {e}"
+                errors.append(f"{model}/{api_ver}:404")
     if rate_limited:
         hint = f" — {last_detail}" if last_detail else ""
         return f"⚠️ Gemini: Rate-Limit auf allen Modellen erreicht{hint}. Tipp: Tageskontingent (Free Tier = 1500 Req/Tag) evtl. erschöpft — morgen erneut versuchen oder Google AI Studio → Quota prüfen."
-    return "⚠️ Gemini-Fehler: Kein verfügbares Modell gefunden"
+    return f"⚠️ Gemini-Fehler: Kein verfügbares Modell gefunden. Getestet: {', '.join(errors) if errors else 'alle'}. Bitte API-Key prüfen."
 
 # ── Darstellung (identisch mit bewährtem E-Mail-Format) ───────────────────────
 ASSET_FARBEN = {"aktie": "#1a73e8", "krypto": "#f7931a", "metall": "#FFD700"}

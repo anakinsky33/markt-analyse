@@ -83,13 +83,22 @@ GMAIL_APP_PASSWORT = "xxxx xxxx xxxx xxxx"
 EMPFAENGER         = "empfaenger@mail.com"
 ```
 
-Alle Keys können alternativ direkt in der App-Sidebar eingegeben werden.
+Sidebar-Sichtbarkeit der Secrets:
+
+| Secret | Sidebar sichtbar? |
+|--------|------------------|
+| `ANTHROPIC_API_KEY` | Ja (Passwort-Feld) |
+| `GOOGLE_AI_KEY` | Ja (Passwort-Feld) |
+| `FINNHUB_API_KEY` | Nein — nur aus Secrets |
+| `GMAIL_ABSENDER` | Nein — nur aus Secrets |
+| `GMAIL_APP_PASSWORT` | Nein — nur aus Secrets |
+| `EMPFAENGER` | Ja (editierbares Textfeld, vorausgefüllt aus Secret) |
 
 ---
 
 ## Wichtige Konventionen
 
-- **Versionsnummer** (`APP_VERSION`) bei jeder Änderung hochzählen (aktuell 2.15.0)
+- **Versionsnummer** (`APP_VERSION`) bei jeder Änderung hochzählen (aktuell 2.18.0)
 - `render_card()` ist die einzige Darstellungsfunktion — gilt für App und E-Mail
 - Gemini-Modelle werden automatisch erkannt — keine manuelle Modellpflege nötig
 - `commit.gpgsign=false` immer als `-c` Flag übergeben (globale Signing-Config blockiert sonst)

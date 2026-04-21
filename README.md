@@ -49,6 +49,8 @@ Streamlit-App für tägliche technische Analysen von Aktien, Krypto und Edelmeta
 - Optionaler Versand nach der Analyse
 - Gleiches HTML-Format wie App-Darstellung inkl. Modell-Label
 - Gmail via App-Passwort (SMTP Port 465 / Fallback 587)
+- Absender und App-Passwort kommen aus Secrets (nicht in der Sidebar sichtbar)
+- Empfänger-Adresse ist in der Sidebar editierbar (vorausgefüllt aus Secret)
 
 ---
 
@@ -67,7 +69,7 @@ GMAIL_APP_PASSWORT = "xxxx xxxx xxxx xxxx"
 EMPFAENGER         = "empfaenger@mail.com"
 ```
 
-> Secrets sind optional — alle Keys können auch direkt in der Sidebar eingegeben werden.
+> KI-Keys (Claude, Gemini) und Empfänger-Adresse können auch direkt in der Sidebar eingegeben werden. Finnhub-Key, Gmail-Absender und App-Passwort werden ausschließlich aus den Secrets geladen.
 
 ---
 

@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "2.16.0"
+APP_VERSION = "2.17.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -111,12 +111,9 @@ with st.sidebar:
     # E-Mail
     st.subheader("📧 E-Mail")
     send_mail = st.toggle("Analyse per Mail senden", value=False)
-    if send_mail:
-        gmail_absender = st.text_input("Absender Gmail",  value=get_secret("GMAIL_ABSENDER"))
-        gmail_passwort = st.text_input("App-Passwort",    value=get_secret("GMAIL_APP_PASSWORT"), type="password")
-        empfaenger     = st.text_input("Empfänger",       value=get_secret("EMPFAENGER"))
-    else:
-        gmail_absender = gmail_passwort = empfaenger = ""
+    gmail_absender = get_secret("GMAIL_ABSENDER")
+    gmail_passwort = get_secret("GMAIL_APP_PASSWORT")
+    empfaenger     = get_secret("EMPFAENGER")
 
 # ── Hauptbereich Header ────────────────────────────────────────────────────────
 st.title("📊 Markt Analyse")

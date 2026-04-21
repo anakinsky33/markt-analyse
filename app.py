@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "2.5.0"
+APP_VERSION = "2.6.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -143,9 +143,17 @@ def fetch_yahoo(symbol, days=400):
     req = urllib.request.Request(url, headers=YAHOO_HEADERS)
     with urllib.request.urlopen(req, timeout=20) as r:
         data = json.loads(r.read())
-    result = data["chart"]["result"][0]
+    results = data["chart"].get("result") or []
+    if not results:
+        err = data["chart"].get("error") or {}
+        raise Exception(err.get("description") or f"Kein Ergebnis für {symbol}")
+    result = results[0]
+    timestamps = result.get("timestamp")
+    if not timestamps:
+        raise Exception(f"Kein Zeitreihen-Daten für {symbol} (Yahoo Format geändert)")
+    closes = result["indicators"]["quote"][0]["close"]
     return [{"date": datetime.date.fromtimestamp(ts).isoformat(), "close": round(float(c), 4)}
-            for ts, c in zip(result["timestamp"], result["indicators"]["quote"][0]["close"])
+            for ts, c in zip(timestamps, closes)
             if c is not None and c > 0]
 
 def fetch_kraken_coin(coin, days=720):
@@ -156,11 +164,13 @@ def fetch_kraken_coin(coin, days=720):
     with urllib.request.urlopen(req, timeout=20) as r:
         data = json.loads(r.read())
     if data.get("error") and data["error"]:
-        raise Exception(f"Kraken: {data['error']}")
-    result_key = next(k for k in data["result"] if k != "last")
-    candles = data["result"][result_key]
-    if not candles:
+        raise Exception(f"Kraken Pair {pair} unbekannt: {data['error']}")
+    keys = [k for k in data.get("result", {}) if k != "last"]
+    if not keys:
         raise Exception(f"Keine Daten für {pair} auf Kraken")
+    candles = data["result"][keys[0]]
+    if not candles:
+        raise Exception(f"Leere Datenreihe für {pair} auf Kraken")
     return [{"date": datetime.date.fromtimestamp(int(c[0])).isoformat(), "close": round(float(c[4]), 8)}
             for c in candles if float(c[4]) > 0]
 

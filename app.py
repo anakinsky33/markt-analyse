@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "2.8.0"
+APP_VERSION = "2.9.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -448,12 +448,11 @@ def ai_gemini(name, typ, data, fund, prog, key):
                 detail = ""
             if e.code == 429:
                 return f"⚠️ Gemini: Rate-Limit ({model}) — {detail or 'bitte warten und erneut versuchen'}"
-            if e.code not in (404, 400):
-                return f"⚠️ Gemini-Fehler ({e.code}, {model}): {detail or e.reason}"
+            return f"⚠️ Gemini-Fehler ({e.code}, {model}): {detail or e.reason}"
         except Exception as e:
             return f"⚠️ Gemini-Fehler ({model}): {e}"
 
-    return f"⚠️ Gemini: Analyse fehlgeschlagen. Verfügbare Modelle: {[m for m,_ in available_models[:5]]}"
+    return f"⚠️ Gemini: Alle Modelle fehlgeschlagen. Verfügbar: {[m for m,_ in available_models[:5]]}"
 
 # ── Darstellung (identisch mit bewährtem E-Mail-Format) ───────────────────────
 ASSET_FARBEN = {"aktie": "#1a73e8", "krypto": "#f7931a", "metall": "#FFD700"}

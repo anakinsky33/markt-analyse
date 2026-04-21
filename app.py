@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "2.15.0"
+APP_VERSION = "2.16.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -89,14 +89,7 @@ with st.sidebar:
 
     st.divider()
 
-    # API Keys
-    st.subheader("🔑 API Keys")
-    finnhub_key = st.text_input(
-        "Finnhub (Fundamentaldaten)",
-        value=get_secret("FINNHUB_API_KEY"),
-        type="password",
-        placeholder="finnhub.io → kostenlos",
-    )
+    finnhub_key = get_secret("FINNHUB_API_KEY")
 
     st.markdown("**🤖 KI-Analyse**")
     ai_modus = st.radio(

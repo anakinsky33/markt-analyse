@@ -86,6 +86,7 @@ EMPFAENGER         = "empfaenger@mail.com"
 
 | Version | Änderung |
 |---------|----------|
+| 2.16.0 | Finnhub API-Key aus Sidebar entfernt (wird im Hintergrund aus Secrets geladen) |
 | 2.15.0 | CoinCap als zweiter Fallback für custom Coins (Kraken → CoinCap → Yahoo) |
 | 2.14.0 | Verwendetes KI-Modell in der Analysekarte anzeigen |
 | 2.13.0 | Gemini maxOutputTokens 8000; Prompt ohne Einleitung/Begrüßung |

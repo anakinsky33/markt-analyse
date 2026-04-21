@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "2.7.0"
+APP_VERSION = "2.8.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -400,42 +400,60 @@ def ai_gemini(name, typ, data, fund, prog, key):
     prompt = _build_prompt(name, typ, data, fund, prog, history_days=14, short=True)
     body = json.dumps({"contents":[{"parts":[{"text":prompt}]}],
                        "generationConfig":{"maxOutputTokens":800,"temperature":0.7}}).encode()
-    rate_limited = False
-    last_detail = ""
-    errors = []
-    for model in ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash", "gemini-1.5-flash-8b"]:
-        for api_ver in ["v1", "v1beta"]:
+
+    # Verfügbare Modelle abfragen
+    available_models = []
+    for api_ver in ["v1beta", "v1"]:
+        try:
+            list_url = f"https://generativelanguage.googleapis.com/{api_ver}/models?key={key}"
+            req = urllib.request.Request(list_url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=15) as r:
+                mlist = json.loads(r.read())
+            for m in mlist.get("models", []):
+                n = m.get("name","").replace("models/","")
+                if "generateContent" in m.get("supportedGenerationMethods", []):
+                    available_models.append((n, api_ver))
+            if available_models:
+                break
+        except urllib.error.HTTPError as e:
             try:
-                url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{model}:generateContent?key={key}"
-                req = urllib.request.Request(url, data=body, headers={"Content-Type":"application/json"})
-                with urllib.request.urlopen(req, timeout=45) as r:
-                    resp = json.loads(r.read())
-                return resp["candidates"][0]["content"]["parts"][0]["text"]
-            except urllib.error.HTTPError as e:
-                try:
-                    detail = json.loads(e.read().decode()).get("error", {}).get("message", "")
-                    last_detail = detail
-                except Exception:
-                    detail = ""
-                if e.code == 429:
-                    rate_limited = True
-                    break  # nächstes Modell
-                if e.code == 404:
-                    errors.append(f"{model}/{api_ver}:404")
-                    continue  # nächste API-Version
-                return f"⚠️ Gemini-Fehler ({e.code}): {detail or e.reason}"
-            except Exception as e:
-                err = str(e)
-                if "429" in err:
-                    rate_limited = True
-                    break
-                if "404" not in err:
-                    return f"⚠️ Gemini-Fehler: {e}"
-                errors.append(f"{model}/{api_ver}:404")
-    if rate_limited:
-        hint = f" — {last_detail}" if last_detail else ""
-        return f"⚠️ Gemini: Rate-Limit auf allen Modellen erreicht{hint}. Tipp: Tageskontingent (Free Tier = 1500 Req/Tag) evtl. erschöpft — morgen erneut versuchen oder Google AI Studio → Quota prüfen."
-    return f"⚠️ Gemini-Fehler: Kein verfügbares Modell gefunden. Getestet: {', '.join(errors) if errors else 'alle'}. Bitte API-Key prüfen."
+                detail = json.loads(e.read().decode()).get("error", {}).get("message", "")
+            except Exception:
+                detail = str(e)
+            if e.code in (401, 403):
+                return f"⚠️ Gemini: API-Key ungültig oder keine Berechtigung ({e.code}): {detail}"
+            if e.code != 404:
+                return f"⚠️ Gemini: Modellliste-Fehler ({e.code}): {detail}"
+        except Exception as e:
+            return f"⚠️ Gemini: Verbindungsfehler: {e}"
+
+    if not available_models:
+        return "⚠️ Gemini: Keine Modelle gefunden. Bitte prüfe ob die Generative Language API im Google Cloud Projekt aktiviert ist."
+
+    # Bevorzugte Modelle zuerst versuchen
+    preferred = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash", "gemini-1.5-flash-8b"]
+    ordered = sorted(available_models, key=lambda x: next((i for i,p in enumerate(preferred) if p in x[0]), 99))
+
+    for model, api_ver in ordered[:4]:
+        try:
+            url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{model}:generateContent?key={key}"
+            req = urllib.request.Request(url, data=body, headers={"Content-Type":"application/json"})
+            with urllib.request.urlopen(req, timeout=45) as r:
+                resp = json.loads(r.read())
+            return resp["candidates"][0]["content"]["parts"][0]["text"]
+        except urllib.error.HTTPError as e:
+            try:
+                detail = json.loads(e.read().decode()).get("error", {}).get("message", "")
+            except Exception:
+                detail = ""
+            if e.code == 429:
+                return f"⚠️ Gemini: Rate-Limit ({model}) — {detail or 'bitte warten und erneut versuchen'}"
+            if e.code not in (404, 400):
+                return f"⚠️ Gemini-Fehler ({e.code}, {model}): {detail or e.reason}"
+        except Exception as e:
+            return f"⚠️ Gemini-Fehler ({model}): {e}"
+
+    return f"⚠️ Gemini: Analyse fehlgeschlagen. Verfügbare Modelle: {[m for m,_ in available_models[:5]]}"
 
 # ── Darstellung (identisch mit bewährtem E-Mail-Format) ───────────────────────
 ASSET_FARBEN = {"aktie": "#1a73e8", "krypto": "#f7931a", "metall": "#FFD700"}

@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "2.13.0"
+APP_VERSION = "2.14.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -392,9 +392,9 @@ def ai_claude(name, typ, data, fund, prog, key):
             max_tokens=4000,
             messages=[{"role":"user","content":_build_prompt(name,typ,data,fund,prog)}],
         )
-        return msg.content[0].text
+        return msg.content[0].text, "claude-haiku-4-5"
     except Exception as e:
-        return f"⚠️ Claude-Fehler: {e}"
+        return f"⚠️ Claude-Fehler: {e}", "claude-haiku-4-5"
 
 def ai_gemini(name, typ, data, fund, prog, key):
     prompt = _build_prompt(name, typ, data, fund, prog)
@@ -421,14 +421,14 @@ def ai_gemini(name, typ, data, fund, prog, key):
             except Exception:
                 detail = str(e)
             if e.code in (401, 403):
-                return f"⚠️ Gemini: API-Key ungültig oder keine Berechtigung ({e.code}): {detail}"
+                return f"⚠️ Gemini: API-Key ungültig oder keine Berechtigung ({e.code}): {detail}", ""
             if e.code != 404:
-                return f"⚠️ Gemini: Modellliste-Fehler ({e.code}): {detail}"
+                return f"⚠️ Gemini: Modellliste-Fehler ({e.code}): {detail}", ""
         except Exception as e:
-            return f"⚠️ Gemini: Verbindungsfehler: {e}"
+            return f"⚠️ Gemini: Verbindungsfehler: {e}", ""
 
     if not available_models:
-        return "⚠️ Gemini: Keine Modelle gefunden. Bitte prüfe ob die Generative Language API im Google Cloud Projekt aktiviert ist."
+        return "⚠️ Gemini: Keine Modelle gefunden. Bitte prüfe ob die Generative Language API im Google Cloud Projekt aktiviert ist.", ""
 
     # Bevorzugte Modelle zuerst versuchen
     preferred = ["gemini-2.5-flash", "gemini-2.0-flash-001", "gemini-2.0-flash-lite-001", "gemini-2.5-pro"]
@@ -440,24 +440,24 @@ def ai_gemini(name, typ, data, fund, prog, key):
             req = urllib.request.Request(url, data=body, headers={"Content-Type":"application/json"})
             with urllib.request.urlopen(req, timeout=45) as r:
                 resp = json.loads(r.read())
-            return resp["candidates"][0]["content"]["parts"][0]["text"]
+            return resp["candidates"][0]["content"]["parts"][0]["text"], model
         except urllib.error.HTTPError as e:
             try:
                 detail = json.loads(e.read().decode()).get("error", {}).get("message", "")
             except Exception:
                 detail = ""
             if e.code == 429:
-                return f"⚠️ Gemini: Rate-Limit ({model}) — {detail or 'bitte warten und erneut versuchen'}"
-            return f"⚠️ Gemini-Fehler ({e.code}, {model}): {detail or e.reason}"
+                return f"⚠️ Gemini: Rate-Limit ({model}) — {detail or 'bitte warten und erneut versuchen'}", model
+            return f"⚠️ Gemini-Fehler ({e.code}, {model}): {detail or e.reason}", model
         except Exception as e:
-            return f"⚠️ Gemini-Fehler ({model}): {e}"
+            return f"⚠️ Gemini-Fehler ({model}): {e}", model
 
-    return f"⚠️ Gemini: Alle Modelle fehlgeschlagen. Verfügbar: {[m for m,_ in available_models[:5]]}"
+    return f"⚠️ Gemini: Alle Modelle fehlgeschlagen. Verfügbar: {[m for m,_ in available_models[:5]]}", ""
 
 # ── Darstellung (identisch mit bewährtem E-Mail-Format) ───────────────────────
 ASSET_FARBEN = {"aktie": "#1a73e8", "krypto": "#f7931a", "metall": "#FFD700"}
 
-def render_card(name, typ, einheit, last, prog, fund, analyse_text):
+def render_card(name, typ, einheit, last, prog, fund, analyse_text, ai_modell=""):
     farbe = ASSET_FARBEN.get(typ, "#888")
     trend_col = "#27ae60" if prog["main_bull"] else "#e74c3c"
     trend_txt = "📈 BULLISCH" if prog["main_bull"] else "📉 BÄRISCH"
@@ -564,7 +564,8 @@ def render_card(name, typ, einheit, last, prog, fund, analyse_text):
         prognose_row = f'<tr><td style="background:#fff8f0;padding:16px 20px;border-left:4px solid #e74c3c">{prognose_html}</td></tr>'
     rest_row = ""
     if rest_html:
-        rest_row = f'<tr><td style="background:white;padding:20px">{rest_html}</td></tr>'
+        modell_label = f'<div style="font-size:11px;color:#aaa;letter-spacing:1px;margin-bottom:10px">ANALYSE · {ai_modell.upper()}</div>' if ai_modell else ""
+        rest_row = f'<tr><td style="background:white;padding:20px">{modell_label}{rest_html}</td></tr>'
 
     return f"""
 <table width="100%" cellpadding="0" cellspacing="0" style="max-width:680px;margin:0 auto 30px auto;font-family:Arial,sans-serif;border-collapse:collapse">
@@ -669,16 +670,17 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
 
         # 3. KI-Analyse
         analyse_text = ""
+        ai_modell = ""
         if "Claude" in ai_modus and ai_key:
             bar.progress(fortschritt + 0.75/n, text=f"{name}: Claude analysiert...")
-            analyse_text = ai_claude(name, typ, data, fund, prog, ai_key)
+            analyse_text, ai_modell = ai_claude(name, typ, data, fund, prog, ai_key)
         elif "Gemini" in ai_modus and ai_key:
             bar.progress(fortschritt + 0.75/n, text=f"{name}: Gemini analysiert...")
-            analyse_text = ai_gemini(name, typ, data, fund, prog, ai_key)
+            analyse_text, ai_modell = ai_gemini(name, typ, data, fund, prog, ai_key)
 
         # 4. Karte rendern (iframe für CSS-Isolation vom Streamlit-Theme)
         import streamlit.components.v1 as components
-        card_html = render_card(name, typ, einheit, last, prog, fund, analyse_text)
+        card_html = render_card(name, typ, einheit, last, prog, fund, analyse_text, ai_modell)
         full_html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>body{{margin:0;padding:0;background:transparent}}</style></head>
 <body>{card_html}</body></html>"""
@@ -686,7 +688,7 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
         components.html(full_html, height=height, scrolling=True)
 
         # HTML für E-Mail sammeln (gleiches Format wie App-Karte)
-        mail_html += render_card(name, typ, einheit, last, prog, fund, analyse_text)
+        mail_html += render_card(name, typ, einheit, last, prog, fund, analyse_text, ai_modell)
 
         bar.progress((idx+1)/n, text=f"{name} ✓")
         if idx < n-1:

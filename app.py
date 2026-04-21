@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "2.12.0"
+APP_VERSION = "2.13.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -357,7 +357,7 @@ LETZTE {history_days} TAGE:
 {history}
 
 Antworte OHNE Markdown-Tabellen, OHNE Code-Blöcke, OHNE --- Trennlinien. Nur Fliesstext und Aufzählungen.{kompakt}
-Beginne IMMER mit der 48h-Prognose, dann folgt die detaillierte Analyse.
+Beginne DIREKT mit "## 1." — KEINE Einleitung, KEIN Begrüßungssatz, KEIN Vorwort.
 
 ## 1. 2-Tages-Prognose (48h)
 - HAUPTSZENARIO (XX% Wahrscheinlichkeit): Konkreter Kursverlauf mit Zielkurs und % Veränderung.
@@ -399,7 +399,7 @@ def ai_claude(name, typ, data, fund, prog, key):
 def ai_gemini(name, typ, data, fund, prog, key):
     prompt = _build_prompt(name, typ, data, fund, prog)
     body = json.dumps({"contents":[{"parts":[{"text":prompt}]}],
-                       "generationConfig":{"maxOutputTokens":4000,"temperature":0.7}}).encode()
+                       "generationConfig":{"maxOutputTokens":8000,"temperature":0.7}}).encode()
 
     # Verfügbare Modelle abfragen
     available_models = []

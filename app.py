@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "2.14.0"
+APP_VERSION = "2.15.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -155,6 +155,27 @@ def fetch_yahoo(symbol, days=400):
     return [{"date": datetime.date.fromtimestamp(ts).isoformat(), "close": round(float(c), 4)}
             for ts, c in zip(timestamps, closes)
             if c is not None and c > 0]
+
+def fetch_coincap(coin, days=400):
+    search_url = f"https://api.coincap.io/v2/assets?search={urllib.parse.quote(coin.lower())}&limit=5"
+    req = urllib.request.Request(search_url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        assets = json.loads(r.read()).get("data", [])
+    match = next((a for a in assets if a["symbol"].upper() == coin.upper()), None) or (assets[0] if assets else None)
+    if not match:
+        raise Exception(f"'{coin}' nicht auf CoinCap gefunden")
+    coin_id = match["id"]
+    now_ms  = int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000)
+    start_ms = now_ms - days * 86400 * 1000
+    hist_url = f"https://api.coincap.io/v2/assets/{coin_id}/history?interval=d1&start={start_ms}&end={now_ms}"
+    req = urllib.request.Request(hist_url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        prices = json.loads(r.read()).get("data", [])
+    if not prices:
+        raise Exception(f"Keine Preisdaten für {coin_id} auf CoinCap")
+    return [{"date": datetime.datetime.fromtimestamp(int(p["time"]) // 1000, datetime.timezone.utc).date().isoformat(),
+             "close": round(float(p["priceUsd"]), 8)}
+            for p in prices]
 
 def fetch_kraken_coin(coin, days=720):
     pair  = coin.upper() + "USD"
@@ -637,13 +658,19 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
             if typ == "krypto" and not asset.get("yahoo_krypto"):
                 raw = fetch_kraken(asset["pair"], asset["kraken"])
             elif asset.get("yahoo_krypto"):
-                try:
-                    raw = fetch_kraken_coin(asset["name"])
-                except Exception as e_kr:
+                errors = []
+                raw = None
+                for fn, lbl in [
+                    (lambda: fetch_kraken_coin(asset["name"]), "Kraken"),
+                    (lambda: fetch_coincap(asset["name"]),     "CoinCap"),
+                    (lambda: fetch_yahoo(asset["symbol"]),     "Yahoo"),
+                ]:
                     try:
-                        raw = fetch_yahoo(asset["symbol"])
-                    except Exception as e_yahoo:
-                        raise Exception(f"Kraken: {e_kr} | Yahoo: {e_yahoo}")
+                        raw = fn(); break
+                    except Exception as e:
+                        errors.append(f"{lbl}: {e}")
+                if raw is None:
+                    raise Exception(" | ".join(errors))
             else:
                 raw = fetch_yahoo(asset["symbol"])
             data = build(raw)

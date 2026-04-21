@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "2.10.0"
+APP_VERSION = "2.11.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -397,9 +397,9 @@ def ai_claude(name, typ, data, fund, prog, key):
         return f"⚠️ Claude-Fehler: {e}"
 
 def ai_gemini(name, typ, data, fund, prog, key):
-    prompt = _build_prompt(name, typ, data, fund, prog, history_days=14, short=True)
+    prompt = _build_prompt(name, typ, data, fund, prog)
     body = json.dumps({"contents":[{"parts":[{"text":prompt}]}],
-                       "generationConfig":{"maxOutputTokens":800,"temperature":0.7}}).encode()
+                       "generationConfig":{"maxOutputTokens":3000,"temperature":0.7}}).encode()
 
     # Verfügbare Modelle abfragen
     available_models = []

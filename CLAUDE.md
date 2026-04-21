@@ -3,7 +3,7 @@
 ## Projektbeschreibung
 Streamlit-App für tägliche technische Analysen von Aktien, Krypto und Edelmetallen mit KI-Unterstützung (Claude / Gemini) und optionalem E-Mail-Versand.
 
-**Aktuelle Version:** 2.14.0  
+**Aktuelle Version:** 2.15.0  
 **Deployment:** Streamlit Cloud → `anakinsky33/markt-analyse`, Branch `main`, File `app.py`
 
 ---
@@ -25,7 +25,9 @@ Streamlit-App für tägliche technische Analysen von Aktien, Krypto und Edelmeta
 ### Datenabruf
 - `fetch_yahoo(symbol)` — Aktien & Edelmetalle via Yahoo Finance v8
 - `fetch_kraken(pair, kraken_key)` — BTC & XRP via Kraken Public API (feste Pairs)
-- `fetch_kraken_coin(coin)` — Custom Coins via Kraken (`{COIN}USD`), Fallback: `fetch_yahoo`
+- `fetch_kraken_coin(coin)` — Custom Coins via Kraken (`{COIN}USD`)
+- `fetch_coincap(coin)` — Custom Coins via CoinCap API (Symbol-Suche → Tagespreise)
+- Fallback-Kette custom Coins: Kraken → CoinCap → Yahoo Finance
 
 ### Technische Indikatoren
 - `build(raw)` — berechnet EMA50, EMA200, RSI(14), MACD aus Rohdaten
@@ -46,8 +48,9 @@ Streamlit-App für tägliche technische Analysen von Aktien, Krypto und Edelmeta
 
 | Quelle | Verwendung |
 |--------|-----------|
-| Yahoo Finance v8 | Aktien, Edelmetalle, Fallback custom Coins |
-| Kraken Public API | BTC, XRP, custom Coins |
+| Yahoo Finance v8 | Aktien, Edelmetalle, 3. Fallback custom Coins |
+| Kraken Public API | BTC, XRP, custom Coins (primär) |
+| CoinCap API | custom Coins (2. Fallback, breite Abdeckung) |
 | Finnhub (optional) | Fundamentaldaten, Ticker-Suche |
 
 ---
@@ -86,7 +89,7 @@ Alle Keys können alternativ direkt in der App-Sidebar eingegeben werden.
 
 ## Wichtige Konventionen
 
-- **Versionsnummer** (`APP_VERSION`) bei jeder Änderung hochzählen (z.B. 2.14.0 → 2.15.0)
+- **Versionsnummer** (`APP_VERSION`) bei jeder Änderung hochzählen (aktuell 2.15.0)
 - `render_card()` ist die einzige Darstellungsfunktion — gilt für App und E-Mail
 - Gemini-Modelle werden automatisch erkannt — keine manuelle Modellpflege nötig
 - `commit.gpgsign=false` immer als `-c` Flag übergeben (globale Signing-Config blockiert sonst)

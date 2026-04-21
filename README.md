@@ -10,7 +10,7 @@ Streamlit-App für tägliche technische Analysen von Aktien, Krypto und Edelmeta
 
 ### Assets
 - **Aktien** — S&P 500 fest + beliebige Ticker (kommagetrennt, z.B. `NVDA, SAP.DE`)
-- **Krypto** — Bitcoin & XRP (Daten via Kraken API) + beliebige Coins (kommagetrennt, z.B. `ETH, SOL, DOGE`) via Kraken, Fallback Yahoo Finance
+- **Krypto** — Bitcoin & XRP (Daten via Kraken API) + beliebige Coins (kommagetrennt, z.B. `ETH, SOL, ADA, KAS`) via Kraken → CoinCap → Yahoo Finance (automatische Fallback-Kette)
 - **Edelmetalle** — Gold & Silber (Daten via Yahoo Finance)
 - **Ticker-Suche** — Firmenname eingeben → Ticker per Finnhub-Suche finden
 - **Alle Assets standardmäßig abgewählt** — nur gewünschte Assets ankreuzen
@@ -75,8 +75,9 @@ EMPFAENGER         = "empfaenger@mail.com"
 
 | Quelle | Verwendung | Kosten |
 |--------|-----------|--------|
-| Yahoo Finance v8 | Aktien & Edelmetalle OHLC, Fallback für custom Coins | kostenlos |
-| Kraken Public API | BTC, XRP & custom Coins OHLC (Daily) | kostenlos |
+| Yahoo Finance v8 | Aktien & Edelmetalle OHLC, 3. Fallback für custom Coins | kostenlos |
+| Kraken Public API | BTC, XRP & custom Coins OHLC (Daily, primär) | kostenlos |
+| CoinCap API | custom Coins OHLC (2. Fallback, breite Coin-Abdeckung) | kostenlos |
 | Finnhub | Fundamentaldaten, Ticker-Suche | kostenlos (Free Tier) |
 
 ---
@@ -85,6 +86,7 @@ EMPFAENGER         = "empfaenger@mail.com"
 
 | Version | Änderung |
 |---------|----------|
+| 2.15.0 | CoinCap als zweiter Fallback für custom Coins (Kraken → CoinCap → Yahoo) |
 | 2.14.0 | Verwendetes KI-Modell in der Analysekarte anzeigen |
 | 2.13.0 | Gemini maxOutputTokens 8000; Prompt ohne Einleitung/Begrüßung |
 | 2.10.0 | Gemini Modelle auf 2.5-flash / 2.0-flash-001 aktualisiert (2.0-flash deprecated) |

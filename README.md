@@ -86,7 +86,8 @@ EMPFAENGER         = "empfaenger@mail.com"
 
 | Version | Änderung |
 |---------|----------|
-| 2.17.0 | Gmail-Felder (Absender, Passwort, Empfänger) aus Sidebar entfernt — werden im Hintergrund aus Secrets geladen |
+| 2.18.0 | Empfänger-Adresse wieder als editierbares Feld in der Sidebar |
+| 2.17.0 | Gmail-Absender und App-Passwort aus Sidebar entfernt — werden im Hintergrund aus Secrets geladen |
 | 2.16.0 | Finnhub API-Key aus Sidebar entfernt (wird im Hintergrund aus Secrets geladen) |
 | 2.15.0 | CoinCap als zweiter Fallback für custom Coins (Kraken → CoinCap → Yahoo) |
 | 2.14.0 | Verwendetes KI-Modell in der Analysekarte anzeigen |

@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "2.9.0"
+APP_VERSION = "2.10.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -431,7 +431,7 @@ def ai_gemini(name, typ, data, fund, prog, key):
         return "⚠️ Gemini: Keine Modelle gefunden. Bitte prüfe ob die Generative Language API im Google Cloud Projekt aktiviert ist."
 
     # Bevorzugte Modelle zuerst versuchen
-    preferred = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash", "gemini-1.5-flash-8b"]
+    preferred = ["gemini-2.5-flash", "gemini-2.0-flash-001", "gemini-2.0-flash-lite-001", "gemini-2.5-pro"]
     ordered = sorted(available_models, key=lambda x: next((i for i,p in enumerate(preferred) if p in x[0]), 99))
 
     for model, api_ver in ordered[:4]:

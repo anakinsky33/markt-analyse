@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "2.20.0"
+APP_VERSION = "2.21.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -492,33 +492,20 @@ def ai_gemini(name, typ, data, fund, prog, key, horizont="täglich"):
 # ── Darstellung (identisch mit bewährtem E-Mail-Format) ───────────────────────
 ASSET_FARBEN = {"aktie": "#1a73e8", "krypto": "#f7931a", "metall": "#FFD700"}
 
-def _make_charts(data, horizont="täglich"):
+def _chart_ctx(data, horizont):
     n   = 52 if horizont == "wöchentlich" else 60
     pts = data[-n:]
     total = len(pts)
-    if total < 5:
-        return ""
-
-    W = 620
-    PL, PR, PT, PB = 50, 14, 14, 18
-    pw = W - PL - PR
+    W = 620; PL, PR, PT, PB = 50, 14, 14, 18; pw = W - PL - PR
     lbl = "font-family:Arial,sans-serif;font-size:9px"
-
-    def xs(i):
-        return PL + i / max(total - 1, 1) * pw
-
+    def xs(i): return PL + i / max(total-1, 1) * pw
     def ny(v, lo, hi, H):
-        if hi == lo:
-            return PT + (H - PT - PB) / 2
-        return PT + (1 - (v - lo) / (hi - lo)) * (H - PT - PB)
-
+        return PT+(1-(v-lo)/(hi-lo))*(H-PT-PB) if hi != lo else PT+(H-PT-PB)/2
     def pline(vals, lo, hi, H, color, width=1.5):
-        segs = [(xs(i), ny(v, lo, hi, H)) for i, v in enumerate(vals) if v is not None]
-        if len(segs) < 2:
-            return ""
-        d = " ".join(f"{'M' if j == 0 else 'L'}{x:.1f},{y:.1f}" for j, (x, y) in enumerate(segs))
+        segs = [(xs(i), ny(v,lo,hi,H)) for i,v in enumerate(vals) if v is not None]
+        if len(segs) < 2: return ""
+        d = " ".join(f"{'M' if j==0 else 'L'}{x:.1f},{y:.1f}" for j,(x,y) in enumerate(segs))
         return f'<path d="{d}" stroke="{color}" stroke-width="{width}" fill="none" stroke-linejoin="round" stroke-linecap="round"/>'
-
     def fmt(v):
         av = abs(v)
         if av >= 1000: return f"{v:,.0f}"
@@ -526,36 +513,27 @@ def _make_charts(data, horizont="täglich"):
         if av >= 1:    return f"{v:.2f}"
         if av >= 0.01: return f"{v:.4f}"
         return f"{v:.6f}"
-
     def xlbls(H):
-        step = max(1, total // 5)
-        out = ""
+        step = max(1, total//5); out = ""
         for i in range(0, total, step):
-            out += f'<text x="{xs(i):.1f}" y="{H - 4}" style="{lbl};fill:#555" text-anchor="middle">{pts[i]["date"][5:]}</text>'
+            out += f'<text x="{xs(i):.1f}" y="{H-4}" style="{lbl};fill:#555" text-anchor="middle">{pts[i]["date"][5:]}</text>'
         return out
+    return pts, total, W, PL, PR, PT, PB, pw, lbl, xs, ny, pline, fmt, xlbls
 
-    # ── Chart 1: Kurs + EMA50 + EMA200 ───────────────────────────
-    H1 = 145
-    prices = [p["price"]  for p in pts]
-    e50    = [p["ema50"]  for p in pts]
-    e200   = [p["ema200"] for p in pts]
-    all1   = [v for v in prices + e50 + e200 if v is not None]
-    lo1, hi1 = min(all1), max(all1)
-    mg1 = (hi1 - lo1) * 0.06 or abs(lo1) * 0.01 or 1
-    lo1 -= mg1; hi1 += mg1
-
-    grid1 = ""
+def _chart_ema(data, horizont="täglich"):
+    pts, total, W, PL, PR, PT, PB, pw, lbl, xs, ny, pline, fmt, xlbls = _chart_ctx(data, horizont)
+    if total < 5: return ""
+    H = 145
+    prices = [p["price"] for p in pts]; e50 = [p["ema50"] for p in pts]; e200 = [p["ema200"] for p in pts]
+    all1 = [v for v in prices+e50+e200 if v is not None]
+    lo, hi = min(all1), max(all1); mg = (hi-lo)*0.06 or abs(lo)*0.01 or 1; lo -= mg; hi += mg
+    grid = ""
     for t in [0.15, 0.5, 0.85]:
-        v = lo1 + t * (hi1 - lo1)
-        y = ny(v, lo1, hi1, H1)
-        grid1 += f'<line x1="{PL}" y1="{y:.1f}" x2="{W-PR}" y2="{y:.1f}" stroke="#1e2d3d" stroke-width="0.6"/>'
-        grid1 += f'<text x="{PL-3}" y="{y+3:.1f}" style="{lbl};fill:#555" text-anchor="end">{fmt(v)}</text>'
-
-    c1 = f'''<svg viewBox="0 0 {W} {H1}" style="width:100%;display:block;background:#0f1923">
-      {grid1}
-      {pline(e200, lo1, hi1, H1, "#e74c3c", 1.4)}
-      {pline(e50,  lo1, hi1, H1, "#3498db", 1.4)}
-      {pline(prices, lo1, hi1, H1, "#ecf0f1", 1.9)}
+        v = lo+t*(hi-lo); y = ny(v,lo,hi,H)
+        grid += f'<line x1="{PL}" y1="{y:.1f}" x2="{W-PR}" y2="{y:.1f}" stroke="#1e2d3d" stroke-width="0.6"/>'
+        grid += f'<text x="{PL-3}" y="{y+3:.1f}" style="{lbl};fill:#555" text-anchor="end">{fmt(v)}</text>'
+    return f'''<svg viewBox="0 0 {W} {H}" style="width:100%;display:block;background:#0f1923">
+      {grid}{pline(e200,lo,hi,H,"#e74c3c",1.4)}{pline(e50,lo,hi,H,"#3498db",1.4)}{pline(prices,lo,hi,H,"#ecf0f1",1.9)}
       <text x="{PL+4}" y="{PT+10}" style="{lbl};fill:#888;font-weight:bold">Kurs + EMA</text>
       <line x1="{PL+68}" y1="{PT+6}" x2="{PL+80}" y2="{PT+6}" stroke="#ecf0f1" stroke-width="1.9"/>
       <text x="{PL+83}" y="{PT+10}" style="{lbl};fill:#aaa">Kurs</text>
@@ -563,83 +541,65 @@ def _make_charts(data, horizont="täglich"):
       <text x="{PL+121}" y="{PT+10}" style="{lbl};fill:#3498db">EMA 50</text>
       <line x1="{PL+155}" y1="{PT+6}" x2="{PL+167}" y2="{PT+6}" stroke="#e74c3c" stroke-width="1.4"/>
       <text x="{PL+170}" y="{PT+10}" style="{lbl};fill:#e74c3c">EMA 200</text>
-      {xlbls(H1)}
-    </svg>'''
+      {xlbls(H)}</svg>'''
 
-    # ── Chart 2: RSI ─────────────────────────────────────────────
-    H2 = 88
+def _chart_rsi(data, horizont="täglich"):
+    pts, total, W, PL, PR, PT, PB, pw, lbl, xs, ny, pline, fmt, xlbls = _chart_ctx(data, horizont)
+    if total < 5: return ""
+    H = 88
     rsi_vals = [p["rsi"] for p in pts]
-    y70 = ny(70, 0, 100, H2)
-    y50 = ny(50, 0, 100, H2)
-    y30 = ny(30, 0, 100, H2)
+    y70 = ny(70,0,100,H); y50 = ny(50,0,100,H); y30 = ny(30,0,100,H)
     last_rsi = next((v for v in reversed(rsi_vals) if v is not None), None)
-    rsi_col  = "#e74c3c" if (last_rsi or 50) > 70 else ("#27ae60" if (last_rsi or 50) < 30 else "#f39c12")
-    rsi_lbl  = (f'<text x="{W-PR+2}" y="{ny(last_rsi,0,100,H2)+4:.1f}" style="{lbl};fill:{rsi_col};font-weight:bold">{last_rsi:.0f}</text>'
+    rsi_col  = "#e74c3c" if (last_rsi or 50)>70 else ("#27ae60" if (last_rsi or 50)<30 else "#f39c12")
+    rsi_lbl  = (f'<text x="{W-PR+2}" y="{ny(last_rsi,0,100,H)+4:.1f}" style="{lbl};fill:{rsi_col};font-weight:bold">{last_rsi:.0f}</text>'
                 if last_rsi else "")
-
-    c2 = f'''<svg viewBox="0 0 {W} {H2}" style="width:100%;display:block;background:#0f1923;border-top:1px solid #1a2535">
+    return f'''<svg viewBox="0 0 {W} {H}" style="width:100%;display:block;background:#0f1923">
       <rect x="{PL}" y="{PT}" width="{pw}" height="{y70-PT:.1f}" fill="#e74c3c" opacity="0.08"/>
-      <rect x="{PL}" y="{y30:.1f}" width="{pw}" height="{H2-PB-y30:.1f}" fill="#27ae60" opacity="0.08"/>
+      <rect x="{PL}" y="{y30:.1f}" width="{pw}" height="{H-PB-y30:.1f}" fill="#27ae60" opacity="0.08"/>
       <line x1="{PL}" y1="{y70:.1f}" x2="{W-PR}" y2="{y70:.1f}" stroke="#e74c3c" stroke-width="0.7" stroke-dasharray="4,3"/>
       <line x1="{PL}" y1="{y50:.1f}" x2="{W-PR}" y2="{y50:.1f}" stroke="#444" stroke-width="0.5" stroke-dasharray="2,3"/>
       <line x1="{PL}" y1="{y30:.1f}" x2="{W-PR}" y2="{y30:.1f}" stroke="#27ae60" stroke-width="0.7" stroke-dasharray="4,3"/>
       <text x="{PL-3}" y="{y70+3:.1f}" style="{lbl};fill:#e74c3c" text-anchor="end">70</text>
       <text x="{PL-3}" y="{y50+3:.1f}" style="{lbl};fill:#555" text-anchor="end">50</text>
       <text x="{PL-3}" y="{y30+3:.1f}" style="{lbl};fill:#27ae60" text-anchor="end">30</text>
-      {pline(rsi_vals, 0, 100, H2, "#f39c12", 1.6)}
-      {rsi_lbl}
+      {pline(rsi_vals,0,100,H,"#f39c12",1.6)}{rsi_lbl}
       <text x="{PL+4}" y="{PT+10}" style="{lbl};fill:#888;font-weight:bold">RSI (14)</text>
-    </svg>'''
+      {xlbls(H)}</svg>'''
 
-    # ── Chart 3: MACD ────────────────────────────────────────────
-    H3 = 88
-    macd_vals   = [p["macd"]   for p in pts]
-    signal_vals = [p["signal"] for p in pts]
-    hist_vals   = [p["hist"]   for p in pts]
-    all3 = [v for v in macd_vals + signal_vals + hist_vals if v is not None]
+def _chart_macd(data, horizont="täglich"):
+    pts, total, W, PL, PR, PT, PB, pw, lbl, xs, ny, pline, fmt, xlbls = _chart_ctx(data, horizont)
+    if total < 5: return ""
+    H = 88
+    macd_vals = [p["macd"] for p in pts]; signal_vals = [p["signal"] for p in pts]; hist_vals = [p["hist"] for p in pts]
+    all3 = [v for v in macd_vals+signal_vals+hist_vals if v is not None]
+    if not all3: return ""
+    lo, hi = min(all3), max(all3); mg = (hi-lo)*0.12 or 0.0001; lo -= mg; hi += mg
+    y0 = ny(0,lo,hi,H); bw = max(0.8, pw/total*0.72)
+    hist_svg = ""
+    for i, v in enumerate(hist_vals):
+        if v is None: continue
+        bx = xs(i)-bw/2; by = ny(v,lo,hi,H); col = "#27ae60" if v>=0 else "#e74c3c"
+        if v >= 0: hist_svg += f'<rect x="{bx:.1f}" y="{by:.1f}" width="{bw:.1f}" height="{max(y0-by,0):.1f}" fill="{col}" opacity="0.75"/>'
+        else:      hist_svg += f'<rect x="{bx:.1f}" y="{y0:.1f}" width="{bw:.1f}" height="{max(by-y0,0):.1f}" fill="{col}" opacity="0.75"/>'
+    grid = f'<line x1="{PL}" y1="{y0:.1f}" x2="{W-PR}" y2="{y0:.1f}" stroke="#555" stroke-width="0.8"/>'
+    for t in [0.2, 0.8]:
+        v = lo+t*(hi-lo); y = ny(v,lo,hi,H)
+        if PT < y < H-PB:
+            grid += f'<line x1="{PL}" y1="{y:.1f}" x2="{W-PR}" y2="{y:.1f}" stroke="#1e2d3d" stroke-width="0.5"/>'
+            grid += f'<text x="{PL-3}" y="{y+3:.1f}" style="{lbl};fill:#555" text-anchor="end">{fmt(v)}</text>'
+    return f'''<svg viewBox="0 0 {W} {H}" style="width:100%;display:block;background:#0f1923">
+      {grid}{hist_svg}{pline(macd_vals,lo,hi,H,"#3498db",1.3)}{pline(signal_vals,lo,hi,H,"#f39c12",1.3)}
+      <text x="{PL+4}" y="{PT+10}" style="{lbl};fill:#888;font-weight:bold">MACD</text>
+      <line x1="{PL+50}" y1="{PT+6}" x2="{PL+62}" y2="{PT+6}" stroke="#3498db" stroke-width="1.3"/>
+      <text x="{PL+64}" y="{PT+10}" style="{lbl};fill:#3498db">MACD</text>
+      <line x1="{PL+97}" y1="{PT+6}" x2="{PL+109}" y2="{PT+6}" stroke="#f39c12" stroke-width="1.3"/>
+      <text x="{PL+112}" y="{PT+10}" style="{lbl};fill:#f39c12">Signal</text>
+      {xlbls(H)}</svg>'''
 
-    if not all3:
-        c3 = ""
-    else:
-        lo3, hi3 = min(all3), max(all3)
-        mg3 = (hi3 - lo3) * 0.12 or 0.0001
-        lo3 -= mg3; hi3 += mg3
-        y0 = ny(0, lo3, hi3, H3)
-        bw = max(0.8, pw / total * 0.72)
-
-        hist_svg = ""
-        for i, v in enumerate(hist_vals):
-            if v is None:
-                continue
-            bx  = xs(i) - bw / 2
-            by  = ny(v, lo3, hi3, H3)
-            col = "#27ae60" if v >= 0 else "#e74c3c"
-            if v >= 0:
-                hist_svg += f'<rect x="{bx:.1f}" y="{by:.1f}" width="{bw:.1f}" height="{max(y0-by,0):.1f}" fill="{col}" opacity="0.75"/>'
-            else:
-                hist_svg += f'<rect x="{bx:.1f}" y="{y0:.1f}" width="{bw:.1f}" height="{max(by-y0,0):.1f}" fill="{col}" opacity="0.75"/>'
-
-        grid3 = f'<line x1="{PL}" y1="{y0:.1f}" x2="{W-PR}" y2="{y0:.1f}" stroke="#555" stroke-width="0.8"/>'
-        for t in [0.2, 0.8]:
-            v = lo3 + t * (hi3 - lo3)
-            y = ny(v, lo3, hi3, H3)
-            if PT < y < H3 - PB:
-                grid3 += f'<line x1="{PL}" y1="{y:.1f}" x2="{W-PR}" y2="{y:.1f}" stroke="#1e2d3d" stroke-width="0.5"/>'
-                grid3 += f'<text x="{PL-3}" y="{y+3:.1f}" style="{lbl};fill:#555" text-anchor="end">{fmt(v)}</text>'
-
-        c3 = f'''<svg viewBox="0 0 {W} {H3}" style="width:100%;display:block;background:#0f1923;border-top:1px solid #1a2535">
-          {grid3}
-          {hist_svg}
-          {pline(macd_vals,   lo3, hi3, H3, "#3498db", 1.3)}
-          {pline(signal_vals, lo3, hi3, H3, "#f39c12", 1.3)}
-          <text x="{PL+4}" y="{PT+10}" style="{lbl};fill:#888;font-weight:bold">MACD</text>
-          <line x1="{PL+50}" y1="{PT+6}" x2="{PL+62}" y2="{PT+6}" stroke="#3498db" stroke-width="1.3"/>
-          <text x="{PL+64}" y="{PT+10}" style="{lbl};fill:#3498db">MACD</text>
-          <line x1="{PL+97}" y1="{PT+6}" x2="{PL+109}" y2="{PT+6}" stroke="#f39c12" stroke-width="1.3"/>
-          <text x="{PL+112}" y="{PT+10}" style="{lbl};fill:#f39c12">Signal</text>
-        </svg>'''
-
-    return f'<div style="margin:0;overflow:hidden;border-top:3px solid #1a2535">{c1}{c2}{c3}</div>'
+def _make_charts(data, horizont="täglich"):
+    c1 = _chart_ema(data, horizont); c2 = _chart_rsi(data, horizont); c3 = _chart_macd(data, horizont)
+    if not (c1 or c2 or c3): return ""
+    return f'<div style="margin:0;overflow:hidden">{c1}{c2}{c3}</div>'
 
 def render_card(name, typ, einheit, data, prog, fund, analyse_text, ai_modell="", horizont="täglich"):
     last  = data[-1]
@@ -748,12 +708,40 @@ def render_card(name, typ, einheit, data, prog, fund, analyse_text, ai_modell=""
     prognose_row = ""
     if prognose_html:
         prognose_row = f'<tr><td style="background:#fff8f0;padding:16px 20px;border-left:4px solid #e74c3c">{prognose_html}</td></tr>'
-    rest_row = ""
-    if rest_html:
-        modell_label = f'<div style="font-size:11px;color:#aaa;letter-spacing:1px;margin-bottom:10px">ANALYSE · {ai_modell.upper()}</div>' if ai_modell else ""
-        rest_row = f'<tr><td style="background:white;padding:20px">{modell_label}{rest_html}</td></tr>'
 
-    charts_row = f'<tr><td style="padding:0">{_make_charts(data, horizont=horizont)}</td></tr>'
+    # Charts nach Sektionen einbetten (mit KI-Text) oder gruppiert (regelbasiert)
+    CHART_FNS = {"EMA": _chart_ema, "RSI": _chart_rsi, "MACD": _chart_macd}
+
+    if rest_lines:
+        # Sektionen aufteilen und Charts nach EMA/RSI/MACD-Sektionen einfügen
+        modell_label = f'<div style="font-size:11px;color:#aaa;letter-spacing:1px;margin-bottom:10px">ANALYSE · {ai_modell.upper()}</div>' if ai_modell else ""
+        sections = []; curr_hdr = None; curr_lines = []
+        for line in rest_lines:
+            if line.strip().startswith("## "):
+                sections.append((curr_hdr, curr_lines)); curr_hdr = line.strip(); curr_lines = [line]
+            else:
+                curr_lines.append(line)
+        sections.append((curr_hdr, curr_lines))
+
+        rest_row = ""; first = True
+        for hdr, lines in sections:
+            if not any(l.strip() for l in lines) and not hdr:
+                continue
+            prefix = modell_label if first else ""
+            first = False
+            rest_row += f'<tr><td style="background:white;padding:20px">{prefix}{_lines_to_html(lines)}</td></tr>'
+            if hdr:
+                for key, fn in CHART_FNS.items():
+                    if key in hdr.upper():
+                        svg = fn(data, horizont)
+                        if svg:
+                            rest_row += f'<tr><td style="padding:0">{svg}</td></tr>'
+                        break
+    else:
+        rest_row = ""
+
+    # Gruppierte Charts nur wenn keine KI-Analyse (regelbasiert)
+    charts_row = f'<tr><td style="padding:0">{_make_charts(data, horizont=horizont)}</td></tr>' if not analyse_text else ""
 
     return f"""
 <table width="100%" cellpadding="0" cellspacing="0" style="max-width:680px;margin:0 auto 30px auto;font-family:Arial,sans-serif;border-collapse:collapse">

@@ -89,7 +89,8 @@ EMPFAENGER         = "empfaenger@mail.com"
 
 | Version | Änderung |
 |---------|----------|
-| 2.20.0 | SVG-Charts in Analysekarte: Kurs+EMA50/200, RSI(14), MACD untereinander |
+| 2.21.0 | Charts direkt nach jeweiliger KI-Analyse-Sektion (EMA→Chart3, RSI→Chart2, MACD→Chart3); gruppiert bei regelbasierter Analyse |
+| 2.20.0 | SVG-Charts in Analysekarte: Kurs+EMA50/200, RSI(14), MACD |
 | 2.19.0 | Analysehorizont wählbar: Täglich (48h) oder Wöchentlich (7 Tage); Kraken/Yahoo Wochenkerzen, CoinCap resample |
 | 2.18.0 | Empfänger-Adresse wieder als editierbares Feld in der Sidebar |
 | 2.17.0 | Gmail-Absender und App-Passwort aus Sidebar entfernt — werden im Hintergrund aus Secrets geladen |

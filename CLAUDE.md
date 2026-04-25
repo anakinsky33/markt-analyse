@@ -3,7 +3,7 @@
 ## Projektbeschreibung
 Streamlit-App für tägliche technische Analysen von Aktien, Krypto und Edelmetallen mit KI-Unterstützung (Claude / Gemini) und optionalem E-Mail-Versand.
 
-**Aktuelle Version:** 2.19.0  
+**Aktuelle Version:** 2.20.0  
 **Deployment:** Streamlit Cloud → `anakinsky33/markt-analyse`, Branch `main`, File `app.py`
 
 ---
@@ -99,7 +99,7 @@ Sidebar-Sichtbarkeit der Secrets:
 
 ## Wichtige Konventionen
 
-- **Versionsnummer** (`APP_VERSION`) bei jeder Änderung hochzählen (aktuell 2.19.0)
+- **Versionsnummer** (`APP_VERSION`) bei jeder Änderung hochzählen (aktuell 2.20.0)
 - `render_card()` ist die einzige Darstellungsfunktion — gilt für App und E-Mail
 - Gemini-Modelle werden automatisch erkannt — keine manuelle Modellpflege nötig
 - `commit.gpgsign=false` immer als `-c` Flag übergeben (globale Signing-Config blockiert sonst)

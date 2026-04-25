@@ -21,6 +21,7 @@ Streamlit-App für tägliche technische Analysen von Aktien, Krypto und Edelmeta
 - RSI (14) mit Überkauft/Überverkauft-Erkennung
 - MACD mit Histogramm-Momentum
 - Regelbasierte Prognose: Bull/Bear %, Hauptszenario, Alternativszenario, Invalidierungslevel
+- **Analysehorizont wählbar**: Täglich (48h-Prognose) oder Wöchentlich (7-Tage-Prognose)
 
 ### KI-Analyse (wählbar)
 | Modus | Modell | Hinweis |
@@ -88,6 +89,7 @@ EMPFAENGER         = "empfaenger@mail.com"
 
 | Version | Änderung |
 |---------|----------|
+| 2.19.0 | Analysehorizont wählbar: Täglich (48h) oder Wöchentlich (7 Tage); Kraken/Yahoo Wochenkerzen, CoinCap resample |
 | 2.18.0 | Empfänger-Adresse wieder als editierbares Feld in der Sidebar |
 | 2.17.0 | Gmail-Absender und App-Passwort aus Sidebar entfernt — werden im Hintergrund aus Secrets geladen |
 | 2.16.0 | Finnhub API-Key aus Sidebar entfernt (wird im Hintergrund aus Secrets geladen) |

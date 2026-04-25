@@ -3,7 +3,7 @@
 ## Projektbeschreibung
 Streamlit-App für tägliche technische Analysen von Aktien, Krypto und Edelmetallen mit KI-Unterstützung (Claude / Gemini) und optionalem E-Mail-Versand.
 
-**Aktuelle Version:** 2.18.0  
+**Aktuelle Version:** 2.19.0  
 **Deployment:** Streamlit Cloud → `anakinsky33/markt-analyse`, Branch `main`, File `app.py`
 
 ---
@@ -23,11 +23,12 @@ Streamlit-App für tägliche technische Analysen von Aktien, Krypto und Edelmeta
 ## Architektur (app.py)
 
 ### Datenabruf
-- `fetch_yahoo(symbol)` — Aktien & Edelmetalle via Yahoo Finance v8
-- `fetch_kraken(pair, kraken_key)` — BTC & XRP via Kraken Public API (feste Pairs)
-- `fetch_kraken_coin(coin)` — Custom Coins via Kraken (`{COIN}USD`)
-- `fetch_coincap(coin)` — Custom Coins via CoinCap API (Symbol-Suche → Tagespreise)
-- Fallback-Kette custom Coins: Kraken → CoinCap → Yahoo Finance
+- `fetch_yahoo(symbol, days, interval)` — Aktien & Edelmetalle via Yahoo Finance v8; `interval="1d"` oder `"1wk"`
+- `fetch_kraken(pair, kraken_key, days, interval_min)` — BTC & XRP via Kraken; `interval_min=1440` (täglich) oder `10080` (wöchentlich)
+- `fetch_kraken_coin(coin, days, interval_min)` — Custom Coins via Kraken
+- `fetch_coincap(coin, days)` — Custom Coins via CoinCap API (nur Tageskerzen, `d1`)
+- `resample_weekly(raw)` — aggregiert Tageskerzen zu Wochenkerzen (letzter Schlusskurs der Woche)
+- Fallback-Kette custom Coins: Kraken → CoinCap (ggf. resample) → Yahoo Finance
 
 ### Technische Indikatoren
 - `build(raw)` — berechnet EMA50, EMA200, RSI(14), MACD aus Rohdaten
@@ -98,7 +99,7 @@ Sidebar-Sichtbarkeit der Secrets:
 
 ## Wichtige Konventionen
 
-- **Versionsnummer** (`APP_VERSION`) bei jeder Änderung hochzählen (aktuell 2.18.0)
+- **Versionsnummer** (`APP_VERSION`) bei jeder Änderung hochzählen (aktuell 2.19.0)
 - `render_card()` ist die einzige Darstellungsfunktion — gilt für App und E-Mail
 - Gemini-Modelle werden automatisch erkannt — keine manuelle Modellpflege nötig
 - `commit.gpgsign=false` immer als `-c` Flag übergeben (globale Signing-Config blockiert sonst)

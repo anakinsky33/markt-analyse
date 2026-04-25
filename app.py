@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "2.18.0"
+APP_VERSION = "2.19.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -91,6 +91,15 @@ with st.sidebar:
 
     finnhub_key = get_secret("FINNHUB_API_KEY")
 
+    st.markdown("**📅 Analysehorizont**")
+    horizont = st.radio(
+        "Zeitrahmen",
+        ["📆 Täglich (48h-Prognose)", "📅 Wöchentlich (7-Tage-Prognose)"],
+        index=0,
+        label_visibility="collapsed",
+    )
+    ist_woechentlich = "Wöchentlich" in horizont
+
     st.markdown("**🤖 KI-Analyse**")
     ai_modus = st.radio(
         "Anbieter",
@@ -124,12 +133,12 @@ if not ausgewaehlt:
     st.stop()
 
 # ── Datenabruf ─────────────────────────────────────────────────────────────────
-def fetch_yahoo(symbol, days=400):
+def fetch_yahoo(symbol, days=400, interval="1d"):
     now   = datetime.datetime.now(datetime.timezone.utc)
     end   = int(now.timestamp())
     start = int((now - datetime.timedelta(days=days)).timestamp())
     url   = (f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
-             f"?interval=1d&period1={start}&period2={end}")
+             f"?interval={interval}&period1={start}&period2={end}")
     req = urllib.request.Request(url, headers=YAHOO_HEADERS)
     with urllib.request.urlopen(req, timeout=20) as r:
         data = json.loads(r.read())
@@ -167,10 +176,19 @@ def fetch_coincap(coin, days=400):
              "close": round(float(p["priceUsd"]), 8)}
             for p in prices]
 
-def fetch_kraken_coin(coin, days=720):
+def resample_weekly(raw):
+    """Aggregiert Tageskerzen zu Wochenkerzen (letzter Schlusskurs der Woche)."""
+    weekly = {}
+    for candle in raw:
+        date = datetime.date.fromisoformat(candle["date"])
+        week_key = date.isocalendar()[:2]  # (year, week_number)
+        weekly[week_key] = candle
+    return sorted(weekly.values(), key=lambda x: x["date"])
+
+def fetch_kraken_coin(coin, days=720, interval_min=1440):
     pair  = coin.upper() + "USD"
     since = int((datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)).timestamp())
-    url   = f"https://api.kraken.com/0/public/OHLC?pair={pair}&interval=1440&since={since}"
+    url   = f"https://api.kraken.com/0/public/OHLC?pair={pair}&interval={interval_min}&since={since}"
     req   = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=20) as r:
         data = json.loads(r.read())
@@ -185,9 +203,9 @@ def fetch_kraken_coin(coin, days=720):
     return [{"date": datetime.date.fromtimestamp(int(c[0])).isoformat(), "close": round(float(c[4]), 8)}
             for c in candles if float(c[4]) > 0]
 
-def fetch_kraken(pair, kraken_key, days=720):
+def fetch_kraken(pair, kraken_key, days=720, interval_min=1440):
     since = int((datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)).timestamp())
-    url = f"https://api.kraken.com/0/public/OHLC?pair={pair}&interval=1440&since={since}"
+    url = f"https://api.kraken.com/0/public/OHLC?pair={pair}&interval={interval_min}&since={since}"
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=20) as r:
         data = json.loads(r.read())
@@ -314,12 +332,18 @@ def generate_prognose(data):
     }
 
 # ── KI-Analyse ─────────────────────────────────────────────────────────────────
-def _build_prompt(name, typ, data, fund, prog, history_days=30, short=False):
+def _build_prompt(name, typ, data, fund, prog, history_days=30, short=False, horizont="täglich"):
     last = data[-1]
     def fp(v): return f"{v:.4f}" if v else "—"
     def px(v): return f"{v:,.4f}" if v else "—"
     def pct(v): return f"{v*100:.1f}%" if v else "—"
     f = fund or {}
+
+    ist_woechentlich = horizont == "wöchentlich"
+    zeiteinheit = "WOCHEN" if ist_woechentlich else "TAGE"
+    prognose_titel = "7-Tage-Prognose (1 Woche)" if ist_woechentlich else "2-Tages-Prognose (48h)"
+    prognose_hinweis = "1-Wochen" if ist_woechentlich else "48h"
+    kerzen_typ = "Wochenkerzen" if ist_woechentlich else "Tageskerzen"
 
     history = "\n".join(
         f"  {d['date']}: {px(d['price'])} | RSI:{d['rsi']} | MACD:{d['macd']} | Hist:{d['hist']}"
@@ -339,9 +363,9 @@ FUNDAMENTALDATEN:
 - 52W-Hoch: {fp(f.get('week52High'))} | 52W-Tief: {fp(f.get('week52Low'))}"""
 
     system_map = {
-        "aktie":  f"Du bist ein erfahrener Aktienanalyst mit Expertise in Elliott-Wellen, RSI, MACD und EMAs. Analysiere {name} präzise und meinungsstark auf Deutsch. Nenne immer konkrete Kurslevels.",
-        "krypto": f"Du bist ein erfahrener Kryptoanalyst mit Expertise in Elliott-Wellen, RSI, MACD und EMAs. Analysiere {name}/USD präzise und meinungsstark auf Deutsch. Nenne immer konkrete Kurslevels in USD.",
-        "metall": f"Du bist ein erfahrener Edelmetall-Analyst mit Expertise in Elliott-Wellen, RSI, MACD und EMAs. Analysiere {name} präzise und meinungsstark auf Deutsch. Nenne immer konkrete Preislevels in USD pro Unze.",
+        "aktie":  f"Du bist ein erfahrener Aktienanalyst mit Expertise in Elliott-Wellen, RSI, MACD und EMAs. Analysiere {name} auf Basis von {kerzen_typ} präzise und meinungsstark auf Deutsch. Nenne immer konkrete Kurslevels.",
+        "krypto": f"Du bist ein erfahrener Kryptoanalyst mit Expertise in Elliott-Wellen, RSI, MACD und EMAs. Analysiere {name}/USD auf Basis von {kerzen_typ} präzise und meinungsstark auf Deutsch. Nenne immer konkrete Kurslevels in USD.",
+        "metall": f"Du bist ein erfahrener Edelmetall-Analyst mit Expertise in Elliott-Wellen, RSI, MACD und EMAs. Analysiere {name} auf Basis von {kerzen_typ} präzise und meinungsstark auf Deutsch. Nenne immer konkrete Preislevels in USD pro Unze.",
     }
     system = system_map.get(typ, f"Du bist ein erfahrener Finanzanalyst. Analysiere {name} auf Deutsch.")
     trend = "BULLISCH" if prog["main_bull"] else "BÄRISCH"
@@ -355,7 +379,7 @@ FUNDAMENTALDATEN:
 
     return f"""{system}
 
-AKTUELL ({last['date']}):
+AKTUELL ({last['date']}) — {kerzen_typ.upper()}:
 - Kurs:    {px(last['price'])}
 - EMA 50:  {px(last['ema50'])}
 - EMA 200: {px(last['ema200'])}
@@ -364,18 +388,18 @@ AKTUELL ({last['date']}):
 - Regelbasierter Trend: {trend} ({prog['bull_pct']}% Bull / {prog['bear_pct']}% Bear)
 {fund_block}
 
-LETZTE {history_days} TAGE:
+LETZTE {history_days} {zeiteinheit}:
 {history}
 
 Antworte OHNE Markdown-Tabellen, OHNE Code-Blöcke, OHNE --- Trennlinien. Nur Fliesstext und Aufzählungen.{kompakt}
 Beginne DIREKT mit "## 1." — KEINE Einleitung, KEIN Begrüßungssatz, KEIN Vorwort.
 
-## 1. 2-Tages-Prognose (48h)
+## 1. {prognose_titel}
 - HAUPTSZENARIO (XX% Wahrscheinlichkeit): Konkreter Kursverlauf mit Zielkurs und % Veränderung.
 - ALTERNATIVSZENARIO (XX% Wahrscheinlichkeit): Gegenszenario mit Kursziel.
 - ENTSCHEIDENDE MARKEN: Welche Levels bestimmen das Szenario?
 - INVALIDIERUNGSLEVEL: Ab welchem Kurs wird das Hauptszenario ungültig?
-- HANDLUNGSEMPFEHLUNG: Klar und direkt.
+- HANDLUNGSEMPFEHLUNG: Klar und direkt für den {prognose_hinweis}-Horizont.
 
 ## 2. Elliott-Wellen-Analyse
 Aktive Welle? Impuls oder Korrektur? Position im Zyklus?
@@ -394,21 +418,21 @@ Crossover, Histogramm-Richtung, Momentum-Veränderung?
 ## 7. Gesamtbild & Schlüsselniveaus
 Übergeordneter Bias + konkrete Support- und Resistance-Zonen."""
 
-def ai_claude(name, typ, data, fund, prog, key):
+def ai_claude(name, typ, data, fund, prog, key, horizont="täglich"):
     try:
         import anthropic
         client = anthropic.Anthropic(api_key=key)
         msg = client.messages.create(
             model="claude-haiku-4-5",
             max_tokens=4000,
-            messages=[{"role":"user","content":_build_prompt(name,typ,data,fund,prog)}],
+            messages=[{"role":"user","content":_build_prompt(name,typ,data,fund,prog,horizont=horizont)}],
         )
         return msg.content[0].text, "claude-haiku-4-5"
     except Exception as e:
         return f"⚠️ Claude-Fehler: {e}", "claude-haiku-4-5"
 
-def ai_gemini(name, typ, data, fund, prog, key):
-    prompt = _build_prompt(name, typ, data, fund, prog)
+def ai_gemini(name, typ, data, fund, prog, key, horizont="täglich"):
+    prompt = _build_prompt(name, typ, data, fund, prog, horizont=horizont)
     body = json.dumps({"contents":[{"parts":[{"text":prompt}]}],
                        "generationConfig":{"maxOutputTokens":8000,"temperature":0.7}}).encode()
 
@@ -468,7 +492,7 @@ def ai_gemini(name, typ, data, fund, prog, key):
 # ── Darstellung (identisch mit bewährtem E-Mail-Format) ───────────────────────
 ASSET_FARBEN = {"aktie": "#1a73e8", "krypto": "#f7931a", "metall": "#FFD700"}
 
-def render_card(name, typ, einheit, last, prog, fund, analyse_text, ai_modell=""):
+def render_card(name, typ, einheit, last, prog, fund, analyse_text, ai_modell="", horizont="täglich"):
     farbe = ASSET_FARBEN.get(typ, "#888")
     trend_col = "#27ae60" if prog["main_bull"] else "#e74c3c"
     trend_txt = "📈 BULLISCH" if prog["main_bull"] else "📉 BÄRISCH"
@@ -487,6 +511,7 @@ def render_card(name, typ, einheit, last, prog, fund, analyse_text, ai_modell=""
         return "#e74c3c" if v > 70 else ("#27ae60" if v < 30 else "#f39c12")
 
     kat_label = {"aktie": "AKTIEN ANALYSE", "krypto": "KRYPTO ANALYSE", "metall": "EDELMETALL ANALYSE"}.get(typ, "ANALYSE")
+    horizont_label = "WEEKLY" if horizont == "wöchentlich" else "DAILY"
 
     # Fundamentals
     fund_rows = ""
@@ -581,9 +606,9 @@ def render_card(name, typ, einheit, last, prog, fund, analyse_text, ai_modell=""
     return f"""
 <table width="100%" cellpadding="0" cellspacing="0" style="max-width:680px;margin:0 auto 30px auto;font-family:Arial,sans-serif;border-collapse:collapse">
   <tr><td style="background:#1a1a2e;padding:18px 20px;border-left:5px solid {farbe}">
-    <div style="font-size:10px;color:#aaa;letter-spacing:2px;text-transform:uppercase">{kat_label} · DAILY · {last['date']}</div>
+    <div style="font-size:10px;color:#aaa;letter-spacing:2px;text-transform:uppercase">{kat_label} · {horizont_label} · {last['date']}</div>
     <div style="font-size:22px;font-weight:bold;color:{farbe};margin-top:4px">{name}</div>
-    <div style="font-size:12px;color:#888;margin-top:3px">Elliott Wave · RSI · MACD · EMA 50/200 · 48h-Prognose</div>
+    <div style="font-size:12px;color:#888;margin-top:3px">Elliott Wave · RSI · MACD · EMA 50/200 · {'7-Tage-Prognose' if horizont == 'wöchentlich' else '48h-Prognose'}</div>
   </td></tr>
   <tr><td style="background:{trend_col};padding:12px 16px;color:white;font-weight:bold;font-size:15px">
     {trend_txt} &nbsp; {prog['bull_pct']}% Bull / {prog['bear_pct']}% Bear &nbsp;·&nbsp; {prog['empfehlung']}
@@ -634,6 +659,12 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
     n = len(ausgewaehlt)
     mail_html = ""
 
+    # Intervall-Parameter je nach gewähltem Horizont
+    horizont_str   = "wöchentlich" if ist_woechentlich else "täglich"
+    yahoo_interval = "1wk" if ist_woechentlich else "1d"
+    kraken_int     = 10080 if ist_woechentlich else 1440   # Minuten: 7d vs 1d
+    fetch_days     = 1500 if ist_woechentlich else 400     # mehr History für Wochenkerzen
+
     for idx, asset in enumerate(ausgewaehlt):
         name    = asset["name"]
         typ     = asset["typ"]
@@ -646,14 +677,14 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
         # Kursdaten
         try:
             if typ == "krypto" and not asset.get("yahoo_krypto"):
-                raw = fetch_kraken(asset["pair"], asset["kraken"])
+                raw = fetch_kraken(asset["pair"], asset["kraken"], days=fetch_days, interval_min=kraken_int)
             elif asset.get("yahoo_krypto"):
                 errors = []
                 raw = None
                 for fn, lbl in [
-                    (lambda: fetch_kraken_coin(asset["name"]), "Kraken"),
-                    (lambda: fetch_coincap(asset["name"]),     "CoinCap"),
-                    (lambda: fetch_yahoo(asset["symbol"]),     "Yahoo"),
+                    (lambda: fetch_kraken_coin(asset["name"], days=fetch_days, interval_min=kraken_int), "Kraken"),
+                    (lambda: resample_weekly(fetch_coincap(asset["name"], days=fetch_days)) if ist_woechentlich else fetch_coincap(asset["name"], days=fetch_days), "CoinCap"),
+                    (lambda: fetch_yahoo(asset["symbol"], days=fetch_days, interval=yahoo_interval), "Yahoo"),
                 ]:
                     try:
                         raw = fn(); break
@@ -662,7 +693,7 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
                 if raw is None:
                     raise Exception(" | ".join(errors))
             else:
-                raw = fetch_yahoo(asset["symbol"])
+                raw = fetch_yahoo(asset["symbol"], days=fetch_days, interval=yahoo_interval)
             data = build(raw)
             last = data[-1]
         except Exception as e:
@@ -690,14 +721,14 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
         ai_modell = ""
         if "Claude" in ai_modus and ai_key:
             bar.progress(fortschritt + 0.75/n, text=f"{name}: Claude analysiert...")
-            analyse_text, ai_modell = ai_claude(name, typ, data, fund, prog, ai_key)
+            analyse_text, ai_modell = ai_claude(name, typ, data, fund, prog, ai_key, horizont=horizont_str)
         elif "Gemini" in ai_modus and ai_key:
             bar.progress(fortschritt + 0.75/n, text=f"{name}: Gemini analysiert...")
-            analyse_text, ai_modell = ai_gemini(name, typ, data, fund, prog, ai_key)
+            analyse_text, ai_modell = ai_gemini(name, typ, data, fund, prog, ai_key, horizont=horizont_str)
 
         # 4. Karte rendern (iframe für CSS-Isolation vom Streamlit-Theme)
         import streamlit.components.v1 as components
-        card_html = render_card(name, typ, einheit, last, prog, fund, analyse_text, ai_modell)
+        card_html = render_card(name, typ, einheit, last, prog, fund, analyse_text, ai_modell, horizont=horizont_str)
         full_html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>body{{margin:0;padding:0;background:transparent}}</style></head>
 <body>{card_html}</body></html>"""
@@ -705,7 +736,7 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
         components.html(full_html, height=height, scrolling=True)
 
         # HTML für E-Mail sammeln (gleiches Format wie App-Karte)
-        mail_html += render_card(name, typ, einheit, last, prog, fund, analyse_text, ai_modell)
+        mail_html += render_card(name, typ, einheit, last, prog, fund, analyse_text, ai_modell, horizont=horizont_str)
 
         bar.progress((idx+1)/n, text=f"{name} ✓")
         if idx < n-1:
@@ -723,7 +754,8 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
         else:
             try:
                 msg = MIMEMultipart("alternative")
-                msg["Subject"] = f"Markt Analyse – {heute}"
+                horizont_betreff = "Wöchentlich" if ist_woechentlich else "Täglich"
+                msg["Subject"] = f"Markt Analyse {horizont_betreff} – {heute}"
                 msg["From"]    = absender
                 msg["To"]      = empf
                 msg.attach(MIMEText(

@@ -42,7 +42,12 @@ Streamlit-App für tägliche technische Analysen von Aktien, Krypto und Edelmeta
 
 ### Darstellung
 - Gestylte Karte pro Asset: dunkler Header, Prognose-Banner, Kursziel-Boxen, Indikatortabelle
-- 48h-Prognose prominent hervorgehoben (vor der Detailanalyse)
+- 48h- bzw. 7-Tage-Prognose prominent hervorgehoben (vor der Detailanalyse)
+- **SVG-Charts direkt nach der jeweiligen Analyse-Sektion:**
+  - Kurs + EMA 50/200 — nach Abschnitt "EMA-Trendstruktur"
+  - RSI (14) mit Überkauft-/Überverkauft-Zonen — nach Abschnitt "RSI-Analyse"
+  - MACD mit Histogramm, MACD- und Signal-Linie — nach Abschnitt "MACD-Analyse"
+  - Bei regelbasierter Analyse: alle drei Charts gruppiert nach der Indikatortabelle
 - Verwendetes KI-Modell als Label über der Analyse
 - Fundamentaldaten bei Aktien (via Finnhub)
 
@@ -89,7 +94,7 @@ EMPFAENGER         = "empfaenger@mail.com"
 
 | Version | Änderung |
 |---------|----------|
-| 2.21.0 | Charts direkt nach jeweiliger KI-Analyse-Sektion (EMA→Chart3, RSI→Chart2, MACD→Chart3); gruppiert bei regelbasierter Analyse |
+| 2.21.0 | Charts direkt nach jeweiliger KI-Analyse-Sektion (EMA-Chart, RSI-Chart, MACD-Chart); gruppiert bei regelbasierter Analyse |
 | 2.20.0 | SVG-Charts in Analysekarte: Kurs+EMA50/200, RSI(14), MACD |
 | 2.19.0 | Analysehorizont wählbar: Täglich (48h) oder Wöchentlich (7 Tage); Kraken/Yahoo Wochenkerzen, CoinCap resample |
 | 2.18.0 | Empfänger-Adresse wieder als editierbares Feld in der Sidebar |

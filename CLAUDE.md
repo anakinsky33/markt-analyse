@@ -40,8 +40,14 @@ Streamlit-App für tägliche technische Analysen von Aktien, Krypto und Edelmeta
 - `ai_gemini(...)` → erkennt verfügbare Modelle automatisch via `/v1beta/models?key=...`, bevorzugt `gemini-2.5-flash`; gibt `(text, modellname)` zurück
 
 ### Darstellung
-- `render_card(name, typ, einheit, last, prog, fund, analyse_text, ai_modell="")` — einheitliches HTML für App (iframe) und E-Mail
+- `render_card(name, typ, einheit, data, prog, fund, analyse_text, ai_modell="", horizont="täglich")` — einheitliches HTML für App (iframe) und E-Mail
 - `_lines_to_html(lines)` + `_inline(t)` — Markdown-zu-HTML Konverter
+- `_chart_ctx(data, horizont)` — gemeinsamer Setup-Kontext für alle Charts (Skalierung, Hilfsfunktionen)
+- `_chart_ema(data, horizont)` → SVG Kurs + EMA 50/200
+- `_chart_rsi(data, horizont)` → SVG RSI(14) mit Zonen
+- `_chart_macd(data, horizont)` → SVG MACD-Histogramm + Linien
+- `_make_charts(data, horizont)` → alle drei Charts gruppiert (Fallback bei regelbasierter Analyse)
+- Charts erscheinen direkt nach der jeweiligen KI-Analyse-Sektion (EMA/RSI/MACD-Matching per Keyword)
 
 ---
 

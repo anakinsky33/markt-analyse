@@ -21,7 +21,7 @@ Streamlit-App für tägliche technische Analysen von Aktien, Krypto und Edelmeta
 - RSI (14) mit Überkauft/Überverkauft-Erkennung
 - MACD mit Histogramm-Momentum
 - Regelbasierte Prognose: Bull/Bear %, Hauptszenario, Alternativszenario, Invalidierungslevel
-- **Analysehorizont wählbar**: Täglich (48h-Prognose) oder Wöchentlich (7-Tage-Prognose)
+- **Analysehorizont wählbar**: Täglich (48h), Wöchentlich (7 Tage) oder Monatlich (30 Tage)
 
 ### KI-Analyse (wählbar)
 | Modus | Modell | Hinweis |
@@ -94,6 +94,7 @@ EMPFAENGER         = "empfaenger@mail.com"
 
 | Version | Änderung |
 |---------|----------|
+| 2.23.0 | Monatliche Analyse hinzugefügt (30-Tage-Prognose, Monatskerzen, MONTHLY-Label); Kraken resample_monthly |
 | 2.22.1 | Bugfix: UnboundLocalError `rest_lines` bei regelbasierter Analyse |
 | 2.22.0 | Token-Verbrauch und geschätzte Kosten am Ende jeder KI-Analysekarte |
 | 2.21.0 | Charts direkt nach jeweiliger KI-Analyse-Sektion (EMA-Chart, RSI-Chart, MACD-Chart); gruppiert bei regelbasierter Analyse |

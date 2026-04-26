@@ -3,7 +3,7 @@
 ## Projektbeschreibung
 Streamlit-App für tägliche technische Analysen von Aktien, Krypto und Edelmetallen mit KI-Unterstützung (Claude / Gemini) und optionalem E-Mail-Versand.
 
-**Aktuelle Version:** 2.22.1  
+**Aktuelle Version:** 2.23.0  
 **Deployment:** Streamlit Cloud → `anakinsky33/markt-analyse`, Branch `main`, File `app.py`
 
 ---
@@ -23,11 +23,13 @@ Streamlit-App für tägliche technische Analysen von Aktien, Krypto und Edelmeta
 ## Architektur (app.py)
 
 ### Datenabruf
-- `fetch_yahoo(symbol, days, interval)` — Aktien & Edelmetalle via Yahoo Finance v8; `interval="1d"` oder `"1wk"`
+- `fetch_yahoo(symbol, days, interval)` — Aktien & Edelmetalle via Yahoo Finance v8; `interval="1d"`, `"1wk"` oder `"1mo"`
 - `fetch_kraken(pair, kraken_key, days, interval_min)` — BTC & XRP via Kraken; `interval_min=1440` (täglich) oder `10080` (wöchentlich)
 - `fetch_kraken_coin(coin, days, interval_min)` — Custom Coins via Kraken
 - `fetch_coincap(coin, days)` — Custom Coins via CoinCap API (nur Tageskerzen, `d1`)
 - `resample_weekly(raw)` — aggregiert Tageskerzen zu Wochenkerzen (letzter Schlusskurs der Woche)
+- `resample_monthly(raw)` — aggregiert Tageskerzen zu Monatskerzen (letzter Schlusskurs des Monats)
+- Kraken hat kein Monatsinterval → bei monatlicher Analyse: täglich fetchen + `resample_monthly()`
 - Fallback-Kette custom Coins: Kraken → CoinCap (ggf. resample) → Yahoo Finance
 
 ### Technische Indikatoren
@@ -107,7 +109,7 @@ Sidebar-Sichtbarkeit der Secrets:
 
 ## Wichtige Konventionen
 
-- **Versionsnummer** (`APP_VERSION`) bei jeder Änderung hochzählen (aktuell 2.22.1)
+- **Versionsnummer** (`APP_VERSION`) bei jeder Änderung hochzählen (aktuell 2.23.0)
 - `render_card()` ist die einzige Darstellungsfunktion — gilt für App und E-Mail
 - Gemini-Modelle werden automatisch erkannt — keine manuelle Modellpflege nötig
 - `commit.gpgsign=false` immer als `-c` Flag übergeben (globale Signing-Config blockiert sonst)

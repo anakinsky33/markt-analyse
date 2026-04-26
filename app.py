@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "2.22.1"
+APP_VERSION = "2.23.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -110,11 +110,12 @@ with st.sidebar:
     st.markdown("**📅 Analysehorizont**")
     horizont = st.radio(
         "Zeitrahmen",
-        ["📆 Täglich (48h-Prognose)", "📅 Wöchentlich (7-Tage-Prognose)"],
+        ["📆 Täglich (48h-Prognose)", "📅 Wöchentlich (7-Tage-Prognose)", "🗓️ Monatlich (30-Tage-Prognose)"],
         index=0,
         label_visibility="collapsed",
     )
     ist_woechentlich = "Wöchentlich" in horizont
+    ist_monatlich    = "Monatlich"   in horizont
 
     st.markdown("**🤖 KI-Analyse**")
     ai_modus = st.radio(
@@ -200,6 +201,14 @@ def resample_weekly(raw):
         week_key = date.isocalendar()[:2]  # (year, week_number)
         weekly[week_key] = candle
     return sorted(weekly.values(), key=lambda x: x["date"])
+
+def resample_monthly(raw):
+    """Aggregiert Tageskerzen zu Monatskerzen (letzter Schlusskurs des Monats)."""
+    monthly = {}
+    for candle in raw:
+        date = datetime.date.fromisoformat(candle["date"])
+        monthly[(date.year, date.month)] = candle
+    return sorted(monthly.values(), key=lambda x: x["date"])
 
 def fetch_kraken_coin(coin, days=720, interval_min=1440):
     pair  = coin.upper() + "USD"
@@ -356,10 +365,22 @@ def _build_prompt(name, typ, data, fund, prog, history_days=30, short=False, hor
     f = fund or {}
 
     ist_woechentlich = horizont == "wöchentlich"
-    zeiteinheit = "WOCHEN" if ist_woechentlich else "TAGE"
-    prognose_titel = "7-Tage-Prognose (1 Woche)" if ist_woechentlich else "2-Tages-Prognose (48h)"
-    prognose_hinweis = "1-Wochen" if ist_woechentlich else "48h"
-    kerzen_typ = "Wochenkerzen" if ist_woechentlich else "Tageskerzen"
+    ist_monatlich    = horizont == "monatlich"
+    if ist_monatlich:
+        zeiteinheit    = "MONATE"
+        prognose_titel = "30-Tage-Prognose (1 Monat)"
+        prognose_hinweis = "1-Monats"
+        kerzen_typ     = "Monatskerzen"
+    elif ist_woechentlich:
+        zeiteinheit    = "WOCHEN"
+        prognose_titel = "7-Tage-Prognose (1 Woche)"
+        prognose_hinweis = "1-Wochen"
+        kerzen_typ     = "Wochenkerzen"
+    else:
+        zeiteinheit    = "TAGE"
+        prognose_titel = "2-Tages-Prognose (48h)"
+        prognose_hinweis = "48h"
+        kerzen_typ     = "Tageskerzen"
 
     history = "\n".join(
         f"  {d['date']}: {px(d['price'])} | RSI:{d['rsi']} | MACD:{d['macd']} | Hist:{d['hist']}"
@@ -517,7 +538,7 @@ def ai_gemini(name, typ, data, fund, prog, key, horizont="täglich"):
 ASSET_FARBEN = {"aktie": "#1a73e8", "krypto": "#f7931a", "metall": "#FFD700"}
 
 def _chart_ctx(data, horizont):
-    n   = 52 if horizont == "wöchentlich" else 60
+    n   = 24 if horizont == "monatlich" else (52 if horizont == "wöchentlich" else 60)
     pts = data[-n:]
     total = len(pts)
     W = 620; PL, PR, PT, PB = 50, 14, 14, 18; pw = W - PL - PR
@@ -645,7 +666,7 @@ def render_card(name, typ, einheit, data, prog, fund, analyse_text, ai_modell=""
         return "#e74c3c" if v > 70 else ("#27ae60" if v < 30 else "#f39c12")
 
     kat_label = {"aktie": "AKTIEN ANALYSE", "krypto": "KRYPTO ANALYSE", "metall": "EDELMETALL ANALYSE"}.get(typ, "ANALYSE")
-    horizont_label = "WEEKLY" if horizont == "wöchentlich" else "DAILY"
+    horizont_label = "MONTHLY" if horizont == "monatlich" else ("WEEKLY" if horizont == "wöchentlich" else "DAILY")
 
     # Fundamentals
     fund_rows = ""
@@ -773,7 +794,7 @@ def render_card(name, typ, einheit, data, prog, fund, analyse_text, ai_modell=""
   <tr><td style="background:#1a1a2e;padding:18px 20px;border-left:5px solid {farbe}">
     <div style="font-size:10px;color:#aaa;letter-spacing:2px;text-transform:uppercase">{kat_label} · {horizont_label} · {last['date']}</div>
     <div style="font-size:22px;font-weight:bold;color:{farbe};margin-top:4px">{name}</div>
-    <div style="font-size:12px;color:#888;margin-top:3px">Elliott Wave · RSI · MACD · EMA 50/200 · {'7-Tage-Prognose' if horizont == 'wöchentlich' else '48h-Prognose'}</div>
+    <div style="font-size:12px;color:#888;margin-top:3px">Elliott Wave · RSI · MACD · EMA 50/200 · {'30-Tage-Prognose' if horizont == 'monatlich' else ('7-Tage-Prognose' if horizont == 'wöchentlich' else '48h-Prognose')}</div>
   </td></tr>
   <tr><td style="background:{trend_col};padding:12px 16px;color:white;font-weight:bold;font-size:15px">
     {trend_txt} &nbsp; {prog['bull_pct']}% Bull / {prog['bear_pct']}% Bear &nbsp;·&nbsp; {prog['empfehlung']}
@@ -830,10 +851,21 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
     mail_html = ""
 
     # Intervall-Parameter je nach gewähltem Horizont
-    horizont_str   = "wöchentlich" if ist_woechentlich else "täglich"
-    yahoo_interval = "1wk" if ist_woechentlich else "1d"
-    kraken_int     = 10080 if ist_woechentlich else 1440   # Minuten: 7d vs 1d
-    fetch_days     = 1500 if ist_woechentlich else 400     # mehr History für Wochenkerzen
+    if ist_monatlich:
+        horizont_str   = "monatlich"
+        yahoo_interval = "1mo"
+        kraken_int     = 1440    # Kraken hat kein Monatsinterval → täglich fetchen + resamplen
+        fetch_days     = 3500    # ~115 Monate für EMA50/200
+    elif ist_woechentlich:
+        horizont_str   = "wöchentlich"
+        yahoo_interval = "1wk"
+        kraken_int     = 10080
+        fetch_days     = 1500
+    else:
+        horizont_str   = "täglich"
+        yahoo_interval = "1d"
+        kraken_int     = 1440
+        fetch_days     = 400
 
     for idx, asset in enumerate(ausgewaehlt):
         name    = asset["name"]
@@ -845,15 +877,22 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
         bar.progress(fortschritt, text=f"{name}: Kursdaten laden...")
 
         # Kursdaten
+        def _resample(r):
+            if ist_monatlich:   return resample_monthly(r)
+            if ist_woechentlich: return resample_weekly(r)
+            return r
+
         try:
             if typ == "krypto" and not asset.get("yahoo_krypto"):
                 raw = fetch_kraken(asset["pair"], asset["kraken"], days=fetch_days, interval_min=kraken_int)
+                if ist_monatlich:
+                    raw = resample_monthly(raw)
             elif asset.get("yahoo_krypto"):
                 errors = []
                 raw = None
                 for fn, lbl in [
-                    (lambda: fetch_kraken_coin(asset["name"], days=fetch_days, interval_min=kraken_int), "Kraken"),
-                    (lambda: resample_weekly(fetch_coincap(asset["name"], days=fetch_days)) if ist_woechentlich else fetch_coincap(asset["name"], days=fetch_days), "CoinCap"),
+                    (lambda: _resample(fetch_kraken_coin(asset["name"], days=fetch_days, interval_min=kraken_int)), "Kraken"),
+                    (lambda: _resample(fetch_coincap(asset["name"], days=fetch_days)), "CoinCap"),
                     (lambda: fetch_yahoo(asset["symbol"], days=fetch_days, interval=yahoo_interval), "Yahoo"),
                 ]:
                     try:

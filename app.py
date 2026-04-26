@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "2.22.0"
+APP_VERSION = "2.22.1"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -718,6 +718,7 @@ def render_card(name, typ, einheit, data, prog, fund, analyse_text, ai_modell=""
         return "".join(out)
 
     prognose_html = rest_html = ""
+    prog_lines = []; rest_lines = []
     if analyse_text:
         in_prog = False
         prog_lines, rest_lines = [], []

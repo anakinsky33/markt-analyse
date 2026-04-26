@@ -3,7 +3,7 @@
 ## Projektbeschreibung
 Streamlit-App für tägliche technische Analysen von Aktien, Krypto und Edelmetallen mit KI-Unterstützung (Claude / Gemini) und optionalem E-Mail-Versand.
 
-**Aktuelle Version:** 2.22.0  
+**Aktuelle Version:** 2.22.1  
 **Deployment:** Streamlit Cloud → `anakinsky33/markt-analyse`, Branch `main`, File `app.py`
 
 ---
@@ -35,12 +35,14 @@ Streamlit-App für tägliche technische Analysen von Aktien, Krypto und Edelmeta
 - `generate_prognose(data)` — regelbasierte Bull/Bear-Prognose
 
 ### KI-Analyse
-- `_build_prompt(name, typ, data, fund, prog, history_days=30, short=False)` — gemeinsamer Prompt für beide KI-Anbieter
-- `ai_claude(...)` → gibt `(text, "claude-haiku-4-5")` zurück
-- `ai_gemini(...)` → erkennt verfügbare Modelle automatisch via `/v1beta/models?key=...`, bevorzugt `gemini-2.5-flash`; gibt `(text, modellname)` zurück
+- `_build_prompt(name, typ, data, fund, prog, history_days=30, short=False, horizont="täglich")` — gemeinsamer Prompt für beide KI-Anbieter
+- `ai_claude(...)` → gibt `(text, "claude-haiku-4-5", usage)` zurück; `usage = {input, output, cost}`
+- `ai_gemini(...)` → erkennt verfügbare Modelle automatisch via `/v1beta/models?key=...`, bevorzugt `gemini-2.5-flash`; gibt `(text, modellname, usage)` zurück
+- `_PREISE` — Dict mit Kosten pro 1M Token je Modell (Stand April 2025)
+- `_calc_cost(model, in_tok, out_tok)` → geschätzte Kosten in USD
 
 ### Darstellung
-- `render_card(name, typ, einheit, data, prog, fund, analyse_text, ai_modell="", horizont="täglich")` — einheitliches HTML für App (iframe) und E-Mail
+- `render_card(name, typ, einheit, data, prog, fund, analyse_text, ai_modell="", horizont="täglich", usage=None)` — einheitliches HTML für App (iframe) und E-Mail; zeigt Token-Verbrauch und Kosten wenn `usage` übergeben
 - `_lines_to_html(lines)` + `_inline(t)` — Markdown-zu-HTML Konverter
 - `_chart_ctx(data, horizont)` — gemeinsamer Setup-Kontext für alle Charts (Skalierung, Hilfsfunktionen)
 - `_chart_ema(data, horizont)` → SVG Kurs + EMA 50/200
@@ -105,7 +107,7 @@ Sidebar-Sichtbarkeit der Secrets:
 
 ## Wichtige Konventionen
 
-- **Versionsnummer** (`APP_VERSION`) bei jeder Änderung hochzählen (aktuell 2.22.0)
+- **Versionsnummer** (`APP_VERSION`) bei jeder Änderung hochzählen (aktuell 2.22.1)
 - `render_card()` ist die einzige Darstellungsfunktion — gilt für App und E-Mail
 - Gemini-Modelle werden automatisch erkannt — keine manuelle Modellpflege nötig
 - `commit.gpgsign=false` immer als `-c` Flag übergeben (globale Signing-Config blockiert sonst)

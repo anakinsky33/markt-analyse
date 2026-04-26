@@ -3,7 +3,7 @@
 ## Projektbeschreibung
 Streamlit-App für tägliche technische Analysen von Aktien, Krypto und Edelmetallen mit KI-Unterstützung (Claude / Gemini) und optionalem E-Mail-Versand.
 
-**Aktuelle Version:** 2.23.0  
+**Aktuelle Version:** 2.23.1  
 **Deployment:** Streamlit Cloud → `anakinsky33/markt-analyse`, Branch `main`, File `app.py`
 
 ---
@@ -29,7 +29,7 @@ Streamlit-App für tägliche technische Analysen von Aktien, Krypto und Edelmeta
 - `fetch_coincap(coin, days)` — Custom Coins via CoinCap API (nur Tageskerzen, `d1`)
 - `resample_weekly(raw)` — aggregiert Tageskerzen zu Wochenkerzen (letzter Schlusskurs der Woche)
 - `resample_monthly(raw)` — aggregiert Tageskerzen zu Monatskerzen (letzter Schlusskurs des Monats)
-- Kraken hat kein Monatsinterval → bei monatlicher Analyse: täglich fetchen + `resample_monthly()`
+- Kraken hat kein Monatsinterval → bei monatlicher Analyse: wöchentlich fetchen (`interval=10080`, `fetch_days=5040`) + `resample_monthly()` → ~168 Monatskerzen
 - Fallback-Kette custom Coins: Kraken → CoinCap (ggf. resample) → Yahoo Finance
 
 ### Technische Indikatoren

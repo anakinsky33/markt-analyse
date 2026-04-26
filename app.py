@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "2.23.0"
+APP_VERSION = "2.23.1"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -854,8 +854,8 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
     if ist_monatlich:
         horizont_str   = "monatlich"
         yahoo_interval = "1mo"
-        kraken_int     = 1440    # Kraken hat kein Monatsinterval → täglich fetchen + resamplen
-        fetch_days     = 3500    # ~115 Monate für EMA50/200
+        kraken_int     = 10080   # wöchentlich fetchen → resample_monthly → ~168 Monate
+        fetch_days     = 5040    # 720 Wochenkerzen × 7 = 5040 Tage, deckt Kraken-Maximum ab
     elif ist_woechentlich:
         horizont_str   = "wöchentlich"
         yahoo_interval = "1wk"

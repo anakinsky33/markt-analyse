@@ -94,7 +94,8 @@ EMPFAENGER         = "empfaenger@mail.com"
 
 | Version | Änderung |
 |---------|----------|
-| 2.23.0 | Monatliche Analyse hinzugefügt (30-Tage-Prognose, Monatskerzen, MONTHLY-Label); Kraken resample_monthly |
+| 2.23.1 | Bugfix: Kraken monatlich nutzt nun Wochenkerzen (interval=10080) statt täglich → genug Monatskerzen für MACD/EMA |
+| 2.23.0 | Monatliche Analyse hinzugefügt (30-Tage-Prognose, Monatskerzen, MONTHLY-Label) |
 | 2.22.1 | Bugfix: UnboundLocalError `rest_lines` bei regelbasierter Analyse |
 | 2.22.0 | Token-Verbrauch und geschätzte Kosten am Ende jeder KI-Analysekarte |
 | 2.21.0 | Charts direkt nach jeweiliger KI-Analyse-Sektion (EMA-Chart, RSI-Chart, MACD-Chart); gruppiert bei regelbasierter Analyse |

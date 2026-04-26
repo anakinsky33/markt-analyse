@@ -5,7 +5,7 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-APP_VERSION = "2.21.0"
+APP_VERSION = "2.22.0"
 
 st.set_page_config(page_title="Markt Analyse", page_icon="📊", layout="wide")
 
@@ -26,6 +26,22 @@ FESTE_ASSETS = {
         {"name": "Silber", "symbol": "SI=F", "typ": "metall", "einheit": "USD/oz"},
     ],
 }
+
+# Kosten pro 1 Million Token (Stand April 2025, geschätzt)
+_PREISE = {
+    "claude-haiku-4-5":          {"in": 0.80,  "out": 4.00},
+    "gemini-2.5-flash":          {"in": 0.15,  "out": 0.60},
+    "gemini-2.5-pro":            {"in": 1.25,  "out": 10.00},
+    "gemini-2.0-flash-001":      {"in": 0.10,  "out": 0.40},
+    "gemini-2.0-flash-lite-001": {"in": 0.075, "out": 0.30},
+}
+
+def _calc_cost(model, in_tok, out_tok):
+    key = next((k for k in _PREISE if k in model), None)
+    if not key or not in_tok:
+        return None
+    p = _PREISE[key]
+    return (in_tok * p["in"] + out_tok * p["out"]) / 1_000_000
 
 YAHOO_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
@@ -427,9 +443,12 @@ def ai_claude(name, typ, data, fund, prog, key, horizont="täglich"):
             max_tokens=4000,
             messages=[{"role":"user","content":_build_prompt(name,typ,data,fund,prog,horizont=horizont)}],
         )
-        return msg.content[0].text, "claude-haiku-4-5"
+        in_tok  = msg.usage.input_tokens
+        out_tok = msg.usage.output_tokens
+        usage   = {"input": in_tok, "output": out_tok, "cost": _calc_cost("claude-haiku-4-5", in_tok, out_tok)}
+        return msg.content[0].text, "claude-haiku-4-5", usage
     except Exception as e:
-        return f"⚠️ Claude-Fehler: {e}", "claude-haiku-4-5"
+        return f"⚠️ Claude-Fehler: {e}", "claude-haiku-4-5", {}
 
 def ai_gemini(name, typ, data, fund, prog, key, horizont="täglich"):
     prompt = _build_prompt(name, typ, data, fund, prog, horizont=horizont)
@@ -456,14 +475,14 @@ def ai_gemini(name, typ, data, fund, prog, key, horizont="täglich"):
             except Exception:
                 detail = str(e)
             if e.code in (401, 403):
-                return f"⚠️ Gemini: API-Key ungültig oder keine Berechtigung ({e.code}): {detail}", ""
+                return f"⚠️ Gemini: API-Key ungültig oder keine Berechtigung ({e.code}): {detail}", "", {}
             if e.code != 404:
-                return f"⚠️ Gemini: Modellliste-Fehler ({e.code}): {detail}", ""
+                return f"⚠️ Gemini: Modellliste-Fehler ({e.code}): {detail}", "", {}
         except Exception as e:
-            return f"⚠️ Gemini: Verbindungsfehler: {e}", ""
+            return f"⚠️ Gemini: Verbindungsfehler: {e}", "", {}
 
     if not available_models:
-        return "⚠️ Gemini: Keine Modelle gefunden. Bitte prüfe ob die Generative Language API im Google Cloud Projekt aktiviert ist.", ""
+        return "⚠️ Gemini: Keine Modelle gefunden. Bitte prüfe ob die Generative Language API im Google Cloud Projekt aktiviert ist.", "", {}
 
     # Bevorzugte Modelle zuerst versuchen
     preferred = ["gemini-2.5-flash", "gemini-2.0-flash-001", "gemini-2.0-flash-lite-001", "gemini-2.5-pro"]
@@ -475,19 +494,24 @@ def ai_gemini(name, typ, data, fund, prog, key, horizont="täglich"):
             req = urllib.request.Request(url, data=body, headers={"Content-Type":"application/json"})
             with urllib.request.urlopen(req, timeout=45) as r:
                 resp = json.loads(r.read())
-            return resp["candidates"][0]["content"]["parts"][0]["text"], model
+            text    = resp["candidates"][0]["content"]["parts"][0]["text"]
+            meta    = resp.get("usageMetadata", {})
+            in_tok  = meta.get("promptTokenCount", 0)
+            out_tok = meta.get("candidatesTokenCount", 0)
+            usage   = {"input": in_tok, "output": out_tok, "cost": _calc_cost(model, in_tok, out_tok)}
+            return text, model, usage
         except urllib.error.HTTPError as e:
             try:
                 detail = json.loads(e.read().decode()).get("error", {}).get("message", "")
             except Exception:
                 detail = ""
             if e.code == 429:
-                return f"⚠️ Gemini: Rate-Limit ({model}) — {detail or 'bitte warten und erneut versuchen'}", model
-            return f"⚠️ Gemini-Fehler ({e.code}, {model}): {detail or e.reason}", model
+                return f"⚠️ Gemini: Rate-Limit ({model}) — {detail or 'bitte warten und erneut versuchen'}", model, {}
+            return f"⚠️ Gemini-Fehler ({e.code}, {model}): {detail or e.reason}", model, {}
         except Exception as e:
-            return f"⚠️ Gemini-Fehler ({model}): {e}", model
+            return f"⚠️ Gemini-Fehler ({model}): {e}", model, {}
 
-    return f"⚠️ Gemini: Alle Modelle fehlgeschlagen. Verfügbar: {[m for m,_ in available_models[:5]]}", ""
+    return f"⚠️ Gemini: Alle Modelle fehlgeschlagen. Verfügbar: {[m for m,_ in available_models[:5]]}", "", {}
 
 # ── Darstellung (identisch mit bewährtem E-Mail-Format) ───────────────────────
 ASSET_FARBEN = {"aktie": "#1a73e8", "krypto": "#f7931a", "metall": "#FFD700"}
@@ -601,7 +625,7 @@ def _make_charts(data, horizont="täglich"):
     if not (c1 or c2 or c3): return ""
     return f'<div style="margin:0;overflow:hidden">{c1}{c2}{c3}</div>'
 
-def render_card(name, typ, einheit, data, prog, fund, analyse_text, ai_modell="", horizont="täglich"):
+def render_card(name, typ, einheit, data, prog, fund, analyse_text, ai_modell="", horizont="täglich", usage=None):
     last  = data[-1]
     farbe = ASSET_FARBEN.get(typ, "#888")
     trend_col = "#27ae60" if prog["main_bull"] else "#e74c3c"
@@ -789,6 +813,10 @@ def render_card(name, typ, einheit, data, prog, fund, analyse_text, ai_modell=""
   {charts_row}
   {prognose_row}
   {rest_row}
+  {f'''<tr><td style="background:#f0f4f8;padding:6px 14px;font-size:10px;color:#888;text-align:right;letter-spacing:0.5px">
+    TOKEN &nbsp; Eingabe: {usage["input"]:,} &nbsp;·&nbsp; Ausgabe: {usage["output"]:,}
+    {f'&nbsp;·&nbsp; Geschätzte Kosten: <strong style="color:#555">${usage["cost"]:.4f}</strong>' if usage.get("cost") is not None else ""}
+  </td></tr>''' if usage else ""}
   <tr><td style="padding:10px;text-align:center;font-size:11px;color:#aaa;background:#f9f9f9">Keine Anlageberatung · Daten: Yahoo Finance / Kraken</td></tr>
 </table>
 <br>"""
@@ -859,17 +887,18 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
 
         # 3. KI-Analyse
         analyse_text = ""
-        ai_modell = ""
+        ai_modell    = ""
+        ai_usage     = None
         if "Claude" in ai_modus and ai_key:
             bar.progress(fortschritt + 0.75/n, text=f"{name}: Claude analysiert...")
-            analyse_text, ai_modell = ai_claude(name, typ, data, fund, prog, ai_key, horizont=horizont_str)
+            analyse_text, ai_modell, ai_usage = ai_claude(name, typ, data, fund, prog, ai_key, horizont=horizont_str)
         elif "Gemini" in ai_modus and ai_key:
             bar.progress(fortschritt + 0.75/n, text=f"{name}: Gemini analysiert...")
-            analyse_text, ai_modell = ai_gemini(name, typ, data, fund, prog, ai_key, horizont=horizont_str)
+            analyse_text, ai_modell, ai_usage = ai_gemini(name, typ, data, fund, prog, ai_key, horizont=horizont_str)
 
         # 4. Karte rendern (iframe für CSS-Isolation vom Streamlit-Theme)
         import streamlit.components.v1 as components
-        card_html = render_card(name, typ, einheit, data, prog, fund, analyse_text, ai_modell, horizont=horizont_str)
+        card_html = render_card(name, typ, einheit, data, prog, fund, analyse_text, ai_modell, horizont=horizont_str, usage=ai_usage)
         full_html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>body{{margin:0;padding:0;background:transparent}}</style></head>
 <body>{card_html}</body></html>"""
@@ -877,7 +906,7 @@ if st.button("🚀 Analyse starten", type="primary", width="stretch"):
         components.html(full_html, height=height, scrolling=True)
 
         # HTML für E-Mail sammeln (gleiches Format wie App-Karte)
-        mail_html += render_card(name, typ, einheit, data, prog, fund, analyse_text, ai_modell, horizont=horizont_str)
+        mail_html += render_card(name, typ, einheit, data, prog, fund, analyse_text, ai_modell, horizont=horizont_str, usage=ai_usage)
 
         bar.progress((idx+1)/n, text=f"{name} ✓")
         if idx < n-1:

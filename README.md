@@ -30,7 +30,7 @@ Streamlit-App für tägliche technische Analysen von Aktien, Krypto und Edelmeta
 | Claude (Anthropic) | claude-haiku-4-5 | `sk-ant-...` Key, max 4000 Token |
 | Gemini (Google) | auto-erkannt (bevorzugt gemini-2.5-flash) | `AIza...` Key, Billing erforderlich |
 
-- Die KI beginnt **immer mit der 48h-Prognose + Handlungsempfehlung**, gefolgt von der detaillierten Analyse (Elliott, EMA, RSI, MACD, Fundamentals, Gesamtbild)
+- Die KI beginnt **immer mit der Prognose + Handlungsempfehlung** (48h / 7 Tage / 30 Tage je nach Horizont), gefolgt von der detaillierten Analyse (Elliott, EMA, RSI, MACD, Fundamentals, Gesamtbild)
 - Das verwendete Modell wird in der Analysekarte angezeigt (`ANALYSE · MODELLNAME`)
 - Gemini erkennt automatisch verfügbare Modelle via API — keine manuelle Modellpflege nötig
 
@@ -42,7 +42,7 @@ Streamlit-App für tägliche technische Analysen von Aktien, Krypto und Edelmeta
 
 ### Darstellung
 - Gestylte Karte pro Asset: dunkler Header, Prognose-Banner, Kursziel-Boxen, Indikatortabelle
-- 48h- bzw. 7-Tage-Prognose prominent hervorgehoben (vor der Detailanalyse)
+- Prognose prominent hervorgehoben (vor der Detailanalyse) — 48h / 7 Tage / 30 Tage je nach Horizont
 - **SVG-Charts direkt nach der jeweiligen Analyse-Sektion:**
   - Kurs + EMA 50/200 — nach Abschnitt "EMA-Trendstruktur"
   - RSI (14) mit Überkauft-/Überverkauft-Zonen — nach Abschnitt "RSI-Analyse"
@@ -84,7 +84,7 @@ EMPFAENGER         = "empfaenger@mail.com"
 | Quelle | Verwendung | Kosten |
 |--------|-----------|--------|
 | Yahoo Finance v8 | Aktien & Edelmetalle OHLC, 3. Fallback für custom Coins | kostenlos |
-| Kraken Public API | BTC, XRP & custom Coins OHLC (Daily, primär) | kostenlos |
+| Kraken Public API | BTC, XRP & custom Coins OHLC (täglich / wöchentlich / monatlich via resample, primär) | kostenlos |
 | CoinCap API | custom Coins OHLC (2. Fallback, breite Coin-Abdeckung) | kostenlos |
 | Finnhub | Fundamentaldaten, Ticker-Suche | kostenlos (Free Tier) |
 
